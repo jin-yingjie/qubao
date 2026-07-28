@@ -1,0 +1,81 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: visible;
+  font-family: "Microsoft YaHei", sans-serif;
+  user-select: none;
+}
+
+.interact-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 20px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 0 10px;
+}
+
+.interact-item {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 50%;
+  transition: all 0.15s ease;
+  position: relative;
+  width: 32px;
+  height: 32px;
+}
+
+.interact-item:hover {
+  background: #ffb84d;
+  transform: translateY(-2px);
+  box-shadow: 0 3px 10px rgba(255, 184, 77, 0.5);
+}
+
+.interact-item:active {
+  transform: translateY(0);
+}
+
+.interact-icon {
+  font-size: 16px;
+  line-height: 1;
+  transition: opacity 0.15s ease;
+}
+
+.interact-item:hover .interact-icon {
+  opacity: 0;
+}
+
+.interact-name {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.8);
+  font-size: 11px;
+  color: #fff;
+  background: rgba(50, 50, 50, 0.88);
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 2;
+}
+
+.interact-item:hover .interact-name {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}

@@ -1,0 +1,50 @@
+<!-- ============================================================
+     src/pet/index.html - 桌宠主窗口（桌面上那只小动物）
+     ============================================================
+     这个窗口特点：
+       1. 透明背景（让桌面透过来）
+       2. 无边框
+       3. 永远置顶
+       4. 用户点击 → 弹出功能菜单
+       5. 用户拖动 → 可以拖到桌面任何位置
+     ============================================================ -->
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Pet</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 整个宠物容器（可以被拖动） -->
+  <div id="pet-container" class="pet-container">
+
+    <!-- 角色：小猫（src 由 script.js 从内嵌 base64 注入，不依赖文件系统） -->
+    <img id="pet-cat" class="pet-img active" src="" alt="cat" draggable="false" />
+
+    <!-- 角色：小狗 -->
+    <img id="pet-dog" class="pet-img" src="" alt="dog" draggable="false" />
+
+    <!-- 角色：团子 -->
+    <img id="pet-dumpling" class="pet-img" src="" alt="dumpling" draggable="false" />
+
+    <!-- 自定义图片宠物 -->
+    <img id="pet-custom" class="pet-img" src="" alt="pet" draggable="false" />
+
+    <!-- 心情气泡 -->
+    <div id="mood-bubble" class="mood-bubble"></div>
+
+    <!-- 动作特效层（吃饭/洗澡/睡觉/玩耍的图标动画） -->
+    <div id="action-fx" class="action-fx"></div>
+
+    <!-- 升级特效层 -->
+    <div id="levelup-fx" class="levelup-fx"></div>
+
+    <!-- 角色名字（可选，鼠标悬停时显示提示） -->
+    <div class="tip">点我 🐾</div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>番茄钟</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="pomo-card">
+    <!-- 顶部 -->
+    <div class="pomo-header">
+      <span class="pomo-title">⏰ 专注时间</span>
+      <button class="close-btn" id="closeBtn">×</button>
+    </div>
+
+    <!-- 倒计时显示 -->
+    <div class="timer-display" id="timer">25:00</div>
+
+    <!-- 模式切换 -->
+    <div class="mode-tabs">
+      <button class="mode-btn active" data-mins="25">专注</button>
+      <button class="mode-btn" data-mins="5">短休</button>
+      <button class="mode-btn" data-mins="15">长休</button>
+    </div>
+
+    <!-- 控制按钮 -->
+    <div class="controls">
+      <button class="btn-start" id="startBtn">开始</button>
+      <button class="btn-reset" id="resetBtn">重置</button>
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>

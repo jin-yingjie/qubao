@@ -1,0 +1,267 @@
+/* ============================================================
+ * src/pet/style.css - 桌宠样式
+ * ============================================================
+ * 关键点：
+ *   1. body 背景必须完全透明，桌面才会透过来
+ *   2. 添加"呼吸"动画让角色看起来是活的
+ *   3. 鼠标悬停/拖拽时有视觉反馈
+ * ============================================================ */
+
+/* 1. 页面和 body 完全透明 */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: "Microsoft YaHei", -apple-system, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 2. 宠物容器（底部对齐 + JS 手动拖动） */
+.pet-container {
+  width: 100%;
+  height: 100%;
+  display: block;
+  position: relative;
+  cursor: grab;
+}
+
+.pet-container.dragging {
+  cursor: grabbing;
+}
+
+/* 宠物本体通用样式（PNG 图片） */
+.pet-img {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  -webkit-user-drag: none;
+  animation: breathe 3s ease-in-out infinite;
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.2s ease;
+  cursor: pointer;
+}
+
+/* 当前活动宠物：可见 + 可点击 */
+.pet-img.active {
+  opacity: 1;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* 悬停为手指光标（点击喂养），拖动中为抓住 */
+.pet-container:hover .pet-img.active {
+  transform: scale(1.05);
+}
+
+.pet-container.clicked .pet-img.active {
+  transform: scale(0.9);
+}
+
+/* 拖动中：禁用 hover/click 缩放和呼吸动画，避免视觉偏移 */
+.pet-container.dragging .pet-img.active {
+  transform: none !important;
+  animation: none !important;
+  cursor: grabbing;
+}
+
+/* 自定义图片宠物的各类动作动画 */
+.pet-img.action-feed {
+  animation: actionFeed 0.5s ease-in-out 4 !important;
+}
+.pet-img.action-bathe {
+  animation: actionShake 0.4s ease-in-out 5 !important;
+}
+.pet-img.action-sleep {
+  animation: actionSleep 2s ease-in-out infinite !important;
+  transform-origin: bottom center;
+}
+.pet-img.action-play {
+  animation: actionPlay 0.6s ease-in-out 3 !important;
+}
+.pet-img.happy {
+  animation: happyBounce 0.5s ease-in-out 3;
+}
+.pet-img.sad {
+  filter: grayscale(0.4) brightness(0.9) drop-shadow(0 4px 6px rgba(0,0,0,0.15)) !important;
+  animation: actionSleep 3s ease-in-out infinite !important;
+}
+.pet-img.joyful {
+  animation: joyfulSpin 1.5s ease-in-out infinite !important;
+}
+.pet-img.stretch {
+  animation: actionStretch 1.5s ease-in-out 1 !important;
+}
+
+/* 3. 呼吸动画 */
+@keyframes breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-3px) scale(1.02); }
+}
+
+/* 4. 心情气泡 */
+.mood-bubble {
+  position: absolute;
+  bottom: 65px;
+  left: 50%;
+  font-size: 20px;
+  opacity: 0;
+  transform: translate(-50%, 10px) scale(0.5);
+  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+}
+
+.mood-bubble.show {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+/* 5. 小提示文字（鼠标悬停时显示） */
+.tip {
+  position: absolute;
+  bottom: 95px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.95);
+  color: #555;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.pet-container:hover .tip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+/* 6. 开心动画 */
+@keyframes happyBounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-8px) scale(1.05); }
+}
+
+/* ============================================================
+ * 7. QQ宠物式动作动画与特效
+ * ============================================================ */
+
+/* 动作特效层（图标飘浮动画） */
+.action-fx {
+  position: absolute;
+  bottom: 55px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 18px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.action-fx.show {
+  animation: fxFloat 1.8s ease-out forwards;
+}
+
+@keyframes fxFloat {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(0) scale(0.5); }
+  20%  { opacity: 1; transform: translateX(-50%) translateY(-10px) scale(1.2); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-40px) scale(1); }
+}
+
+/* 吃饭动作：身体左右轻摇 */
+@keyframes actionFeed {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(-8deg); }
+}
+
+/* 洗澡动作：泡泡抖动 */
+@keyframes actionShake {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-3px); }
+  75%      { transform: translateX(3px); }
+}
+
+/* 睡觉动作：缓慢呼吸 + 倾斜 */
+@keyframes actionSleep {
+  0%, 100% { transform: rotate(-5deg) scaleY(1); }
+  50%      { transform: rotate(-5deg) scaleY(0.95); }
+}
+
+/* 玩耍动作：跳跃 */
+@keyframes actionPlay {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  30%      { transform: translateY(-15px) rotate(-10deg); }
+  60%      { transform: translateY(-5px) rotate(10deg); }
+}
+
+/* 升级特效层 */
+.levelup-fx {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 10;
+}
+
+.levelup-fx.show {
+  animation: levelupBurst 2s ease-out forwards;
+}
+
+@keyframes levelupBurst {
+  0%   { opacity: 0; transform: scale(0.3); }
+  20%  { opacity: 1; transform: scale(1.1); }
+  80%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.2); }
+}
+
+.levelup-fx::before {
+  content: "✨🎉✨";
+  position: absolute;
+  bottom: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 16px;
+  white-space: nowrap;
+  text-shadow: 0 0 8px #FFD700, 0 0 16px #FFA500;
+}
+
+.levelup-fx::after {
+  content: "LV UP!";
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 14px;
+  font-weight: bold;
+  color: #FFD700;
+  text-shadow: 0 0 6px #FF8C00, 0 1px 2px rgba(0,0,0,0.4);
+  white-space: nowrap;
+}
+
+/* 心情表情：开心转圈 */
+@keyframes joyfulSpin {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  50%      { transform: rotate(360deg) scale(1.1); }
+}
+
+/* 随机闲逛：伸懒腰 */
+@keyframes actionStretch {
+  0%, 100% { transform: scaleY(1); }
+  40%      { transform: scaleY(1.15) translateY(-4px); }
+  70%      { transform: scaleY(0.95); }
+}

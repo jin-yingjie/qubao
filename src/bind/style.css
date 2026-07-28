@@ -1,0 +1,137 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  background: #FFF8DC;
+  color: #333;
+  user-select: none;
+}
+
+.bind-window {
+  padding: 24px;
+  min-height: 100vh;
+}
+
+.bind-content { font-size: 14px; line-height: 1.6; }
+
+/* 输入区 */
+.input-area {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+#code-input {
+  flex: 1;
+  padding: 12px 14px;
+  border: 2px solid #FFD700;
+  border-radius: 8px;
+  font-size: 20px;
+  letter-spacing: 8px;
+  text-align: center;
+  font-weight: bold;
+  color: #FF6B35;
+  background: white;
+  outline: none;
+}
+#code-input:focus { border-color: #FF6B35; }
+
+.btn-primary {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #FF8C42, #F7931E);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.btn-primary:hover { opacity: 0.9; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-danger {
+  padding: 10px 20px;
+  background: #fff0f0;
+  color: #d33;
+  border: 1px solid #ffcccc;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.btn-danger:hover { background: #ffe0e0; }
+
+/* 消息框 */
+.msg-box {
+  min-height: 20px;
+  margin-top: 8px;
+  font-size: 13px;
+  text-align: center;
+}
+.msg-box.success { color: #52c41a; }
+.msg-box.error { color: #ff4d4f; }
+.msg-box.loading { color: #FF8C00; }
+
+/* 已绑定视图 */
+.bound-info {
+  text-align: center;
+  padding: 30px 16px;
+  background: white;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+.bound-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+.bound-info h3 {
+  color: #52c41a;
+  font-size: 18px;
+  margin-bottom: 12px;
+}
+.bound-user {
+  color: #333;
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+.bound-points {
+  color: #FF8C00;
+  font-size: 14px;
+  font-weight: bold;
+}
+.bound-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+/* 二维码区域 */
+.qr-section {
+  text-align: center;
+  padding: 16px 0;
+  margin-bottom: 16px;
+  background: white;
+  border-radius: 12px;
+}
+.qr-box {
+  width: 160px;
+  height: 160px;
+  margin: 0 auto 10px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid #FFD700;
+}
+.qr-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.qr-tip {
+  font-size: 14px;
+  color: #FF6B35;
+  font-weight: bold;
+  margin: 0 0 4px;
+}
+.qr-tip-sub {
+  font-size: 12px;
+  color: #888;
+  margin: 0;
+}

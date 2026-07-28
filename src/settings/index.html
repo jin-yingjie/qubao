@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>趣宝设置</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="settings-page">
+
+    <div class="section">
+      <div class="section-header">
+        <h2>宠物形象</h2>
+        <button id="open-custom-btn" class="link-btn">+ 自定义宠物</button>
+      </div>
+      <div class="char-picker">
+        <button class="char-btn active" data-char="cat">🐱 小猫</button>
+        <button class="char-btn" data-char="dog">🐶 小狗</button>
+        <button class="char-btn" data-char="dumpling">🥟 团子</button>
+        <button class="char-btn custom-char-btn" data-char="custom" style="display:none;">
+          <img id="custom-thumb" src="" alt="自定义" />
+          <span>自定义</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 自定义宠物弹窗 -->
+    <div id="custom-modal" class="modal-overlay" style="display:none;">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3>自定义宠物</h3>
+          <button id="modal-close-btn" class="modal-close">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="custom-pet-preview">
+            <img id="custom-preview" src="" alt="预览" />
+            <div id="custom-placeholder" class="custom-placeholder">
+              <span>📷</span>
+              <p>上传图片作为宠物</p>
+            </div>
+          </div>
+          <p class="custom-tip">支持 PNG / GIF，建议透明背景图片，尺寸 60×60px 最佳</p>
+          <input type="file" id="file-input" accept="image/png,image/gif,image/jpeg" style="display:none;" />
+        </div>
+        <div class="modal-footer">
+          <button id="upload-btn" class="btn-secondary">选择图片</button>
+          <div class="modal-footer-right">
+            <button id="reset-custom-btn" class="btn-skip" style="display:none;">删除自定义</button>
+            <button id="save-custom-btn" class="btn-primary" disabled>保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>通用设置</h2>
+      <div class="toggle-row">
+        <input type="checkbox" id="autostart-toggle" />
+        <label for="autostart-toggle">开机自动启动趣宝</label>
+      </div>
+    </div>
+
+    <div class="section tip-box">
+      <p>💡 拖动桌宠到屏幕边缘，会自动贴边（露出一半）。</p>
+      <p>💡 左键点击 = 互动，右键点击 = 成长。</p>
+      </div>
+
+    <div class="footer">
+      <span class="version">趣宝 · 一个陪伴你的桌面小伙伴</span>
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>

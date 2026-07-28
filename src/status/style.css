@@ -1,0 +1,249 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: "Microsoft YaHei", sans-serif;
+  user-select: none;
+}
+
+.status-card {
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.97);
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.card-title {
+  text-align: center;
+  font-size: 16px;
+  color: #FF8C00;
+  margin: 0 0 12px 0;
+  font-weight: bold;
+}
+
+/* 顶部等级区 */
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.level-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.level-icon {
+  font-size: 28px;
+}
+
+.level-info {
+  flex: 1;
+}
+
+.level-text {
+  font-size: 13px;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.exp-bar {
+  position: relative;
+  height: 10px;
+  background: #eee;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.exp-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #FFD700, #FFA500);
+  border-radius: 5px;
+  transition: width 0.4s ease;
+}
+
+.exp-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 9px;
+  color: #666;
+  line-height: 10px;
+}
+
+.close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: none;
+  background: #f0f0f0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: #ff6b6b;
+  color: #fff;
+}
+
+/* 状态条列表 */
+.stat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #555;
+  width: 36px;
+}
+
+.stat-bar {
+  flex: 1;
+  height: 12px;
+  background: #eee;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.stat-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.4s ease;
+}
+
+.stat-fill.hunger  { background: linear-gradient(90deg, #FF8C42, #FF6347); }
+.stat-fill.clean   { background: linear-gradient(90deg, #4FC3F7, #29B6F6); }
+.stat-fill.mood    { background: linear-gradient(90deg, #FFD54F, #FFB300); }
+.stat-fill.energy  { background: linear-gradient(90deg, #81C784, #66BB6A); }
+.stat-fill.health  { background: linear-gradient(90deg, #F06292, #E91E63); }
+
+.stat-value {
+  font-size: 11px;
+  color: #888;
+  width: 28px;
+  text-align: right;
+}
+
+/* 互动按钮网格 */
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.action-btn {
+  border: none;
+  background: #f7f7f7;
+  border-radius: 12px;
+  padding: 8px 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+  background: #ffb84d;
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px rgba(255, 184, 77, 0.4);
+}
+
+.action-btn:active {
+  transform: translateY(0);
+}
+
+.action-icon {
+  font-size: 22px;
+}
+
+.action-name {
+  font-size: 10px;
+  color: #555;
+}
+
+.action-btn:hover .action-name {
+  color: #fff;
+}
+
+.card-tip {
+  text-align: center;
+  font-size: 10px;
+  color: #aaa;
+  margin-top: auto;
+}
+
+/* 标题行 */
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  -webkit-app-region: drag;
+}
+
+.login-btn {
+  padding: 3px 10px;
+  background: linear-gradient(135deg, #FF8C42, #F7931E);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 12px;
+  cursor: pointer;
+  line-height: 1.4;
+  -webkit-app-region: no-drag;
+}
+.login-btn:hover {
+  opacity: 0.9;
+}
+
+/* 顶部等级区可拖动 */
+.card-header {
+  -webkit-app-region: drag;
+}
+.level-icon {
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+}
+.close-btn {
+  -webkit-app-region: no-drag;
+}

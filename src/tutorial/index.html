@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>使用教程</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="tutorial-page">
+    <div class="tutorial-header">
+      <div class="mascot">🐾</div>
+      <h1>欢迎使用趣宝</h1>
+      <p class="subtitle">一只陪伴你的桌面小宠物</p>
+    </div>
+
+    <div class="tutorial-content">
+      <div class="step active" data-step="1">
+        <div class="step-icon">🖱️</div>
+        <h3>左键点击 = 喂养互动</h3>
+        <p>点击宠物身体可以和它互动，提升心情值，让趣宝更开心！</p>
+      </div>
+
+      <div class="step" data-step="2">
+        <div class="step-icon">📋</div>
+        <h3>右键点击 = 功能菜单</h3>
+        <p>右键点击宠物可以打开功能菜单：喂食、洗澡、玩耍、睡觉、看病。</p>
+      </div>
+
+      <div class="step" data-step="3">
+        <div class="step-icon">✋</div>
+        <h3>拖动宠物 = 移动位置</h3>
+        <p>鼠标按住宠物周围可以拖动它到桌面任意位置，拖到屏幕边缘会自动贴边。</p>
+      </div>
+
+      <div class="step" data-step="4">
+        <div class="step-icon">📊</div>
+        <h3>状态系统</h3>
+        <p>趣宝有等级、饱食度、清洁度、心情、体力、健康六大属性，记得好好照顾它哦！</p>
+      </div>
+
+      <div class="step" data-step="5">
+        <div class="step-icon">🔧</div>
+        <h3>托盘图标 = 更多功能</h3>
+        <p>右键点击任务栏中的趣宝图标，可以打开设置、便签、番茄钟等更多功能。</p>
+      </div>
+    </div>
+
+    <div class="step-indicators">
+      <span class="dot active" data-step="1"></span>
+      <span class="dot" data-step="2"></span>
+      <span class="dot" data-step="3"></span>
+      <span class="dot" data-step="4"></span>
+      <span class="dot" data-step="5"></span>
+    </div>
+
+    <div class="tutorial-footer">
+      <button id="prev-btn" class="btn-secondary" disabled>上一步</button>
+      <button id="skip-btn" class="btn-skip">跳过</button>
+      <button id="next-btn" class="btn-primary">下一步</button>
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>

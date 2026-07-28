@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>宠物状态</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="status-card">
+    <div class="title-row">
+      <button id="login-btn" class="login-btn">登录</button>
+      <h1 class="card-title" id="card-title">趣宝桌宠</h1>
+    </div>
+    <!-- 顶部：等级 + 关闭 -->
+    <div class="card-header">
+      <div class="level-box">
+        <span class="level-icon">🐱</span>
+        <div class="level-info">
+          <div class="level-text">宠物等级 <span id="level">1</span></div>
+          <div class="exp-bar">
+            <div class="exp-fill" id="exp-fill"></div>
+            <span class="exp-text" id="exp-text">0 / 100</span>
+          </div>
+        </div>
+      </div>
+      <button class="close-btn" id="close-btn">✕</button>
+    </div>
+
+    <!-- 状态条 -->
+    <div class="stat-list">
+      <div class="stat-row">
+        <span class="stat-icon">🍖</span>
+        <span class="stat-label">饱食</span>
+        <div class="stat-bar"><div class="stat-fill hunger" id="bar-hunger"></div></div>
+        <span class="stat-value" id="val-hunger">80</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-icon">🧼</span>
+        <span class="stat-label">清洁</span>
+        <div class="stat-bar"><div class="stat-fill clean" id="bar-clean"></div></div>
+        <span class="stat-value" id="val-clean">80</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-icon">😊</span>
+        <span class="stat-label">心情</span>
+        <div class="stat-bar"><div class="stat-fill mood" id="bar-mood"></div></div>
+        <span class="stat-value" id="val-mood">80</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-icon">⚡</span>
+        <span class="stat-label">体力</span>
+        <div class="stat-bar"><div class="stat-fill energy" id="bar-energy"></div></div>
+        <span class="stat-value" id="val-energy">80</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-icon">❤️</span>
+        <span class="stat-label">健康</span>
+        <div class="stat-bar"><div class="stat-fill health" id="bar-health"></div></div>
+        <span class="stat-value" id="val-health">100</span>
+      </div>
+    </div>
+
+    <!-- 互动按钮 -->
+    <div class="action-grid">
+      <button class="action-btn" data-action="feed">
+        <span class="action-icon">🍚</span>
+        <span class="action-name">喂食</span>
+      </button>
+      <button class="action-btn" data-action="bathe">
+        <span class="action-icon">🛁</span>
+        <span class="action-name">洗澡</span>
+      </button>
+      <button class="action-btn" data-action="play">
+        <span class="action-icon">🎾</span>
+        <span class="action-name">玩耍</span>
+      </button>
+      <button class="action-btn" data-action="sleep">
+        <span class="action-icon">💤</span>
+        <span class="action-name">睡觉</span>
+      </button>
+      <button class="action-btn" data-action="cure">
+        <span class="action-icon">💊</span>
+        <span class="action-name">看病</span>
+      </button>
+    </div>
+
+    <div class="card-tip">照顾好你的宠物，它会慢慢长大～</div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
