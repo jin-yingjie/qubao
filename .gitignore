@@ -2,6 +2,7 @@ node_modules/
 dist/
 out/
 .electron-cache/
+.electron-builder-cache/
 .DS_Store
 Thumbs.db
 *.log
