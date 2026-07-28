@@ -156,3 +156,9 @@ resetCustomBtn.addEventListener('click', () => {
 autostartToggle.addEventListener('change', () => {
   petAPI.setAutoStart(autostartToggle.checked);
 });
+
+// ------- 检查更新 -------
+const checkUpdateBtn = document.getElementById('check-update-btn');
+checkUpdateBtn.addEventListener('click', () => {
+  petAPI.checkUpdate();
+});

@@ -8,10 +8,17 @@
 //   4. 处理窗口之间的通信
 // ============================================================
 
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
 const PET_IMAGES = require('./src/assets-base64.js');
+
+// 当前版本（来自 package.json，自动更新检测的唯一真源）
+const APP_VERSION = require('./package.json').version || '0.0.0';
+// GitHub 仓库坐标（用于检查 Releases 最新版本）
+const GITHUB_OWNER = 'jin-yingjie';
+const GITHUB_REPO = 'qubao';
 
 // ------- 全局变量 -------
 let petWindow = null;       // 桌宠主窗口
@@ -164,6 +171,75 @@ function callCloudApi(action, data) {
     req.write(postData);
     req.end();
   });
+}
+
+// ============================================================
+// 自动更新检测（方案一：查 GitHub Releases 最新版本 → 弹提示 → 打开下载页）
+//   - 不需要 electron-updater，零额外依赖
+//   - 启动后 3 秒自动检查一次（静默，仅提示有新版本）
+//   - 也可从托盘菜单「检查更新」手动触发
+// ============================================================
+function compareVersions(a, b) {
+  // 返回 1 表示 a>b，-1 表示 a<b，0 表示相等
+  const pa = a.replace(/^v/, '').split('.').map(x => parseInt(x) || 0);
+  const pb = b.replace(/^v/, '').split('.').map(x => parseInt(x) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const na = pa[i] || 0, nb = pb[i] || 0;
+    if (na > nb) return 1;
+    if (na < nb) return -1;
+  }
+  return 0;
+}
+
+function checkForUpdates(silent = false) {
+  const options = {
+    hostname: 'api.github.com',
+    path: `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`,
+    method: 'GET',
+    headers: { 'User-Agent': 'qubao-desktop-pet' }
+  };
+  const req = https.request(options, (res) => {
+    let body = '';
+    res.on('data', (chunk) => body += chunk);
+    res.on('end', () => {
+      try {
+        const release = JSON.parse(body);
+        if (!release || !release.tag_name) {
+          if (!silent) dialog.showMessageBoxSync({ type: 'info', title: '检查更新', message: '暂无可用更新', detail: '当前已是最新版本。' });
+          return;
+        }
+        const latestVersion = release.tag_name; // 形如 "v0.2.0"
+        if (compareVersions(latestVersion, APP_VERSION) > 0) {
+          // 发现新版本
+          const result = dialog.showMessageBoxSync({
+            type: 'info',
+            title: '发现新版本',
+            message: `检测到新版本 ${latestVersion}！\n当前版本：v${APP_VERSION}`,
+            detail: release.body || '点击「立即更新」前往下载页面。',
+            buttons: ['立即更新', '稍后提醒'],
+            defaultId: 0,
+            cancelId: 1
+          });
+          if (result === 0) {
+            // 打开该 Release 的下载页面（用户自行下载新安装包覆盖安装即可）
+            shell.openExternal(release.html_url || `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`);
+          }
+        } else {
+          if (!silent) {
+            dialog.showMessageBoxSync({ type: 'info', title: '检查更新', message: '已是最新版本', detail: `当前版本：v${APP_VERSION}\n最新版本：${latestVersion}` });
+          }
+        }
+      } catch (e) {
+        if (!silent) dialog.showMessageBoxSync({ type: 'error', title: '检查更新', message: '检查更新失败', detail: '无法解析服务器返回的数据，请稍后重试。' });
+      }
+    });
+  });
+  req.on('error', () => {
+    if (!silent) dialog.showMessageBoxSync({ type: 'error', title: '检查更新', message: '网络请求失败', detail: '请检查网络连接后重试。' });
+  });
+  req.setTimeout(10000, () => { req.destroy(); if (!silent) dialog.showMessageBoxSync({ type: 'error', title: '检查更新', message: '请求超时', detail: '请检查网络连接后重试。' }); });
+  req.end();
 }
 
 // ============================================================
@@ -607,6 +683,7 @@ function createTray() {
     { label: '⏰ 番茄钟', click: () => createPomodoroWindow() },
     { type: 'separator' },
     { label: '⚙️ 设置', click: () => createSettingsWindow() },
+    { label: '🔄 检查更新', click: () => checkForUpdates(false) },
     { type: 'separator' },
     { label: '退出', click: () => {
       app.isQuiting = true;
@@ -1274,6 +1351,14 @@ ipcMain.handle('pomodoro:reset', (_e, totalSeconds) => {
 });
 ipcMain.handle('pomodoro:getState', () => pomodoro.getState());
 
+// ------- 检查更新 IPC（供设置窗口调用）-------
+ipcMain.handle('app:check-update', () => {
+  checkForUpdates(false);
+  return APP_VERSION;
+});
+// 获取当前版本号
+ipcMain.handle('app:getVersion', () => APP_VERSION);
+
 // 远程互动（带物品检查）
 ipcMain.handle('bind:interact', async (event, { action, itemId }) => {
   const openid = config.bind?.openid
@@ -1439,6 +1524,9 @@ app.whenReady().then(() => {
   createTray();
   restoreNotes();
   startStateDecay();
+
+  // 启动后 3 秒静默检查更新（有新版本才弹提示，无新版本不打扰用户）
+  setTimeout(() => checkForUpdates(true), 3000);
 
   if (config.autoStart) {
     app.setLoginItemSettings({

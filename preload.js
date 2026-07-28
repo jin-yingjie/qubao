@@ -150,5 +150,9 @@ contextBridge.exposeInMainWorld('petAPI', {
   },
   pomodoroOnFinished: (callback) => {
     ipcRenderer.on('pomodoro:finished', () => callback());
-  }
+  },
+
+  // ------- 检查更新 -------
+  checkUpdate: () => ipcRenderer.invoke('app:check-update'),
+  getVersion: () => ipcRenderer.invoke('app:getVersion')
 });

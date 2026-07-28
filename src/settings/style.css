@@ -262,4 +262,22 @@ h2 {
   padding: 12px;
   color: #999;
   font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.update-btn {
+  padding: 6px 16px;
+  border: 1px solid #ffb84d;
+  background: #fff;
+  color: #ff9d1a;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+.update-btn:hover {
+  background: #ffb84d;
+  color: #fff;
 }
