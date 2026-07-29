@@ -585,8 +585,10 @@ function createPetWindow() {
   // 加载桌宠页面
   petWindow.loadFile(path.join(__dirname, 'src', 'pet', 'index.html'));
 
-  // 无条件打开 DevTools（方便排查，排查完可删除此行）
-  petWindow.webContents.openDevTools({ mode: 'detach' });
+  // 仅开发环境下打开 DevTools，生产打包版不再自动弹出
+  if (process.argv.includes('--dev') || process.env.NODE_ENV === 'development') {
+    petWindow.webContents.openDevTools({ mode: 'detach' });
+  }
   petWindow.webContents.once('did-finish-load', () => {
     console.log('[createPetWindow] did-finish-load，发送配置与状态');
     petWindow.webContents.send('config:init', config);
