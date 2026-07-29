@@ -12,6 +12,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog, sh
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
+const crypto = require('crypto');
 const PET_IMAGES = require('./src/assets-base64.js');
 
 // 当前版本（来自 package.json，自动更新检测的唯一真源）
@@ -30,8 +31,10 @@ let pomodoroWindow = null;  // 番茄钟窗口
 let statusWindow = null;    // 状态面板窗口
 let tutorialWindow = null;  // 新手教程窗口
 let bindWindow = null;        // 绑定小程序窗口
+let bubbleWindow = null;       // 独立对话气泡窗口（挂在宠物头顶，尺寸随文字自适应）
 let isDragging = false;     // 拖动中标志，用于跳过 moved 事件的高频干扰
 let dragState = null;       // 拖动状态（窗口起点+鼠标起点）
+let bubbleLowPriority = false;  // 当前气泡是否为"弱提示"（如悬停"点我"，可被重要提示覆盖，鼠标移开立即消失）
 
 // 用户配置（保存在本地）
 const userConfigPath = path.join(app.getPath('userData'), 'config.json');
@@ -90,7 +93,8 @@ function loadConfig() {
     bind: { openid: null, envId: null },
     inventory: [],
     firstLaunch: true,
-    autoStart: false
+    autoStart: true,
+    pomodoro: { soundEnabled: true }
   };
   try {
     if (fs.existsSync(userConfigPath)) {
@@ -103,7 +107,8 @@ function loadConfig() {
         bind: { ...defaults.bind, ...(saved.bind || {}) },
         inventory: Array.isArray(saved.inventory) ? saved.inventory : defaults.inventory,
         firstLaunch: saved.firstLaunch !== undefined ? saved.firstLaunch : defaults.firstLaunch,
-        autoStart: saved.autoStart !== undefined ? saved.autoStart : defaults.autoStart
+        autoStart: saved.autoStart !== undefined ? saved.autoStart : defaults.autoStart, // 旧配置没设过则默认开启
+        pomodoro: { ...defaults.pomodoro, ...(saved.pomodoro || {}) }
       };
     }
   } catch (e) {
@@ -142,32 +147,113 @@ function saveNotes() {
 
 
 // ============================================================
-// 云函数调用工具（通过 HTTP 触发调用 petApi 云函数）
+// 云函数调用工具（通过腾讯云 SCF API Invoke 调用 petApi）
+//   - 使用 TC3-HMAC-SHA256 签名算法，无需 HTTP 触发器
+//   - SecretId/SecretKey 从腾讯云控制台获取
 // ============================================================
+
+// ⚠️ 安全提示：以下密钥会打包进安装包，理论上可被反编译提取。
+//    建议在腾讯云后台创建子账号，仅授予 QcloudCloudBaseFullAccess 权限。
+const CLOUD_SECRET_ID = 'AKIDOsCJDweBUm4IKQVRHwT0a8kEYifQyMZ3';
+const CLOUD_SECRET_KEY = 'NYYL3av67xZKyUzRk5NViiV4PYUChz3v';
+const CLOUD_ENV_ID = 'cloud1-d9gjbey4a7a8fd907';
+const SCF_HOST = 'scf.tencentcloudapi.com';
+const SCF_SERVICE = 'scf';
+const SCF_VERSION = '2018-04-16';
+const SCF_REGION = 'ap-shanghai';
+
 function callCloudApi(action, data) {
   return new Promise((resolve, reject) => {
-    const envId = (config.bind && config.bind.envId) ? config.bind.envId : 'cloud1-d9gjbey4a7a8fd907';
-    const postData = JSON.stringify({ action: action, ...data });
+    // 1. 构造云函数请求参数（ClientContext 是 JSON 字符串）
+    const clientContext = JSON.stringify({ action: action, ...data });
+
+    // 2. 构造 SCF API 请求体
+    const body = JSON.stringify({
+      FunctionName: 'petApi',
+      Namespace: CLOUD_ENV_ID,
+      ClientContext: clientContext,
+      InvocationType: 'RequestResponse'
+    });
+
+    // 3. 生成 TC3-HMAC-SHA256 签名
+    const timestamp = Math.floor(Date.now() / 1000);
+    const date = new Date(timestamp * 1000).toISOString().slice(0, 10);
+
+    // 3.1 规范请求串 (CanonicalRequest)
+    const canonicalHeaders = `content-type:application/json; charset=utf-8\nhost:${SCF_HOST}\n`;
+    const signedHeaders = 'content-type;host';
+    const hashedRequestPayload = crypto.createHash('sha256').update(body).digest('hex');
+    const canonicalRequest = `POST\n/\n\n${canonicalHeaders}\n${signedHeaders}\n${hashedRequestPayload}`;
+
+    // 3.2 待签名串 (StringToSign)
+    const credentialScope = `${date}/${SCF_SERVICE}/tc3_request`;
+    const hashedCanonicalRequest = crypto.createHash('sha256').update(canonicalRequest).digest('hex');
+    const stringToSign = `TC3-HMAC-SHA256\n${timestamp}\n${credentialScope}\n${hashedCanonicalRequest}`;
+
+    // 3.3 计算签名 (Signature)
+    const secretDate = crypto.createHmac('sha256', 'TC3' + CLOUD_SECRET_KEY).update(date).digest();
+    const secretService = crypto.createHmac('sha256', secretDate).update(SCF_SERVICE).digest();
+    const secretSigning = crypto.createHmac('sha256', secretService).update('tc3_request').digest();
+    const signature = crypto.createHmac('sha256', secretSigning).update(stringToSign).digest('hex');
+
+    // 3.4 Authorization 头
+    const authorization = `TC3-HMAC-SHA256 Credential=${CLOUD_SECRET_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    // 4. 发送 HTTPS 请求
+    console.log(`[callCloudApi] action=${action} | data=`, data);
     const options = {
-      hostname: envId + '.service.tcloudbase.com',
-      path: '/petApi',
+      hostname: SCF_HOST,
+      path: '/',
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
+        'Authorization': authorization,
+        'Content-Type': 'application/json; charset=utf-8',
+        'Host': SCF_HOST,
+        'X-TC-Action': 'Invoke',
+        'X-TC-Version': SCF_VERSION,
+        'X-TC-Timestamp': timestamp.toString(),
+        'X-TC-Region': SCF_REGION,
+        'Content-Length': Buffer.byteLength(body)
       }
     };
+
     const req = https.request(options, (res) => {
-      let body = '';
-      res.on('data', (chunk) => body += chunk);
+      let responseBody = '';
+      res.on('data', (chunk) => responseBody += chunk);
       res.on('end', () => {
-        try { resolve(JSON.parse(body)); }
-        catch (e) { reject(new Error('解析云函数响应失败')); }
+        console.log(`[callCloudApi] 响应状态: ${res.statusCode} | body=`, responseBody.substring(0, 500));
+        try {
+          const parsed = JSON.parse(responseBody);
+          // SCF API 响应格式: { Response: { Result: { RetMsg: "..." }, Error: {...}, RequestId: "..." } }
+          if (parsed.Response) {
+            if (parsed.Response.Error) {
+              console.error('[callCloudApi] API错误:', parsed.Response.Error);
+              reject(new Error(`云API错误: ${parsed.Response.Error.Message || '未知错误'}`));
+              return;
+            }
+            // RetMsg 是云函数返回值的 JSON 字符串
+            const retMsg = parsed.Response.Result ? parsed.Response.Result.RetMsg : null;
+            if (retMsg) {
+              try { resolve(JSON.parse(retMsg)); }
+              catch (e) { reject(new Error('解析云函数返回值失败: ' + retMsg.substring(0, 200))); }
+            } else {
+              resolve(parsed.Response);
+            }
+          } else {
+            resolve(parsed);
+          }
+        } catch (e) {
+          reject(new Error('解析响应失败: ' + responseBody.substring(0, 200)));
+        }
       });
     });
-    req.on('error', (e) => reject(new Error('网络请求失败')));
-    req.setTimeout(10000, () => { req.destroy(); reject(new Error('请求超时')); });
-    req.write(postData);
+
+    req.on('error', (e) => {
+      console.error('[callCloudApi] 网络错误:', e.message);
+      reject(new Error('网络请求失败: ' + e.message));
+    });
+    req.setTimeout(15000, () => { req.destroy(); reject(new Error('请求超时')); });
+    req.write(body);
     req.end();
   });
 }
@@ -252,10 +338,14 @@ const pomodoro = {
   remaining: 25 * 60,
   running: false,
   intervalId: null,
-  // 把秒格式化为 MM:SS
+  // 把秒格式化为 HH:MM:SS（>=1 小时时）或 MM:SS
   fmt(sec) {
-    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0');
     const s = (sec % 60).toString().padStart(2, '0');
+    if (h > 0) {
+      return `${h.toString().padStart(2, '0')}:${m}:${s}`;
+    }
     return `${m}:${s}`;
   },
   // 把最新状态推给渲染进程
@@ -268,7 +358,7 @@ const pomodoro = {
       });
     }
   },
-  // 更新任务栏进度条 + 窗口标题（用户要求"只在任务栏显示倒计时"）
+  // 更新任务栏进度条 + 窗口标题（仅显示倒计时数字，不显示番茄图标和状态文字）
   updateTaskbar() {
     if (!pomodoroWindow || pomodoroWindow.isDestroyed()) return;
     const ratio = pomodoro.totalSeconds > 0
@@ -276,17 +366,15 @@ const pomodoro = {
       : 0;
     if (pomodoro.running) {
       pomodoroWindow.setProgressBar(ratio, { mode: 'normal' });
-      pomodoroWindow.setTitle(`🍅 ${pomodoro.fmt(pomodoro.remaining)} 专注中`);
+      pomodoroWindow.setTitle(pomodoro.fmt(pomodoro.remaining));
     } else if (pomodoro.remaining < pomodoro.totalSeconds && pomodoro.remaining > 0) {
       pomodoroWindow.setProgressBar(ratio, { mode: 'paused' });
-      pomodoroWindow.setTitle(`⏸ ${pomodoro.fmt(pomodoro.remaining)} 已暂停`);
+      pomodoroWindow.setTitle(pomodoro.fmt(pomodoro.remaining));
     } else {
       pomodoroWindow.setProgressBar(0, { mode: 'none' });
       pomodoroWindow.setTitle('番茄钟');
     }
-    // 同时刷新任务栏悬停预览底部的"开始/暂停/重置"按钮
-    pomodoro.refreshThumbar();
-    // 把倒计时文字直接画到任务栏按钮图标上，不用悬停也能一眼看到 🍅 24:59
+    // 把倒计时文字直接画到任务栏按钮图标上
     pomodoro.refreshTaskbarIcon();
   },
   tick() {
@@ -297,19 +385,22 @@ const pomodoro = {
     if (pomodoro.remaining <= 0) {
       // 计时结束
       pomodoro.running = false;
+      pomodoro.remaining = 0;
       clearInterval(pomodoro.intervalId);
       pomodoro.intervalId = null;
+      // 把 running=false、remaining=0 的最新状态推给渲染端，让按钮从"暂停"回到"开始"
+      pomodoro.broadcast();
+      pomodoro.updateTaskbar();
       if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
         pomodoroWindow.setProgressBar(1, { mode: 'normal' });
-        pomodoroWindow.setTitle('🎉 时间到！');
-        try {
-          if (pomodoroWindow.isMinimized()) pomodoroWindow.restore();
-          pomodoroWindow.show();
-          pomodoroWindow.focus();
-        } catch (_) {}
+        pomodoroWindow.setTitle('时间到');
+        // 不再强制 show/focus 番茄钟窗口，避免抢焦点
         pomodoroWindow.webContents.send('pomodoro:finished');
-      } else {
-        // 窗口已销毁，走系统通知（没窗口的兜底提醒）
+      }
+      // 1) 让宠物头顶气泡显示提示（独立气泡窗口，按文字长度自适应宽度）
+      showBubble('🎉 番茄钟时间到！休息一下吧～', 5000);
+      if (!petWindow || petWindow.isDestroyed()) {
+        // 宠物窗口不在，走系统通知兜底
         try {
           const { Notification } = require('electron');
           const n = new Notification({
@@ -321,6 +412,15 @@ const pomodoro = {
           n.show();
         } catch (_) {}
       }
+      // 2) 闹铃提醒（受用户配置控制，默认开启）
+      try {
+        if (config.pomodoro?.soundEnabled !== false) {
+          // 用 shell.beep 触发系统提示音；连续响 3 次更易听见
+          shell.beep();
+          setTimeout(() => shell.beep(), 600);
+          setTimeout(() => shell.beep(), 1200);
+        }
+      } catch (_) {}
       pomodoro.resetTaskbarAfter();
     }
   },
@@ -400,24 +500,11 @@ const pomodoro = {
   get iconPlay()  { return pomodoro.mkIcon('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><polygon points="3,1 14,8 3,15" fill="#333"/></svg>'); },
   get iconPause() { return pomodoro.mkIcon('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect x="3" y="1" width="4" height="14" fill="#333"/><rect x="9" y="1" width="4" height="14" fill="#333"/></svg>'); },
   get iconReset() { return pomodoro.mkIcon('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M13.6 8A5.6 5.6 0 1 1 8 2.4V0L4 4l4 4V5.6A2.4 2.4 0 1 0 10.4 8h3.2z" fill="#333"/></svg>'); },
-  // 根据运行状态刷新缩略图按钮
+  // 清空任务栏缩略图按钮（用户要求去掉暂停和重置按钮）
   refreshThumbar() {
     if (!pomodoroWindow || pomodoroWindow.isDestroyed()) return;
     try {
-      const btn1 = pomodoro.running
-        ? { tooltip: '暂停', icon: pomodoro.iconPause, click: () => pomodoro.pause() }
-        : { tooltip: (pomodoro.remaining < pomodoro.totalSeconds && pomodoro.remaining > 0) ? '继续' : '开始',
-            icon: pomodoro.iconPlay,
-            click: () => {
-              if (pomodoro.remaining < pomodoro.totalSeconds && pomodoro.remaining > 0) pomodoro.resume();
-              else pomodoro.start(pomodoro.totalSeconds || 25 * 60);
-            } };
-      const btn2 = {
-        tooltip: '重置',
-        icon: pomodoro.iconReset,
-        click: () => pomodoro.reset(pomodoro.totalSeconds || 25 * 60)
-      };
-      pomodoroWindow.setThumbarButtons([btn1, btn2]);
+      pomodoroWindow.setThumbarButtons([]);
     } catch (_) {}
   },
   // 设置缩略图裁剪区域：只保留"倒计时大字"那一块，Alt+Tab/悬停直接看得到
@@ -443,10 +530,14 @@ const pomodoro = {
     }
     return pomodoro._cachedDefaultIcon;
   },
-  // 生成一张带 🍅 + MM:SS + 状态文字 的 PNG 图标，返回 nativeImage
+  // 生成一张带 🍅 + 时间 + 状态文字 的 PNG 图标，返回 nativeImage（时间 HH:MM:SS 时自动缩小字体避免溢出）
   makeTimerIcon({ timeStr, statusText, running }) {
     const bg = running ? '#ff9d1a' : '#b0b0b0';      // 运行中橙色，暂停灰色
     const subColor = running ? '#fff6e5' : '#e8e8e8';
+    // 字长自适应：MM:SS(5字) → 38px；HH:MM:SS(8字) → 26px；中间线性过渡
+    const len = (timeStr || '').length;
+    const fontSize = len <= 5 ? 38 : (len <= 7 ? 30 : 26);
+    const timeY = len <= 5 ? 84 : 80;
     // 注意：SVG 必须声明 xmlns + 明确 width/height（Chromium rasterize 必须），
     //       foreignObject 可以用完整的 HTML + 系统字体栈（支持 emoji🍅）
     const svg = `<?xml version="1.0" encoding="UTF-8"?>
@@ -460,10 +551,10 @@ const pomodoro = {
   <rect x="2" y="2" width="124" height="124" rx="22" ry="22" fill="url(#bg)" stroke="${running ? '#e88800' : '#8f8f8f'}" stroke-width="2"/>
   <g font-family="'Segoe UI Emoji','Segoe UI Symbol','Apple Color Emoji','Microsoft YaHei',sans-serif"
      text-anchor="middle" dominant-baseline="central" fill="#fff">
-    <text x="64" y="42" font-size="30">🍅</text>
-    <text x="64" y="84" font-size="38" font-weight="700" letter-spacing="1"
+    <text x="64" y="40" font-size="28">🍅</text>
+    <text x="64" y="${timeY}" font-size="${fontSize}" font-weight="700" letter-spacing="1"
           font-family="'Segoe UI','Microsoft YaHei',monospace">${timeStr}</text>
-    <text x="64" y="114" font-size="16" font-weight="500" fill="${subColor}">${statusText}</text>
+    <text x="64" y="116" font-size="15" font-weight="500" fill="${subColor}">${statusText}</text>
   </g>
 </svg>`;
     try {
@@ -609,7 +700,7 @@ function createPetWindow() {
   petWindow.on('moved', () => {
     if (isDragging) return;
     // 首次 moved（loadFile 后触发的那一次）不贴边，避免启动时直接跑屏幕外
-    if (!snapInitialized) { snapInitialized = true; return; }
+    if (!snapInitialized) { snapInitialized = true; syncBubblePosition(); return; }
 
     const [x, y] = petWindow.getPosition();
     const [w, h] = petWindow.getSize();
@@ -648,6 +739,16 @@ function createPetWindow() {
       petWindow.webContents.send('pet:snap-edge', false);
     }
     saveConfig();
+    // 宠物位置变了 → 气泡跟着走
+    syncBubblePosition();
+  });
+
+  petWindow.on('show', syncBubblePosition);
+  petWindow.on('hide', () => hideBubble());
+  petWindow.on('closed', () => {
+    if (bubbleWindow && !bubbleWindow.isDestroyed()) {
+      try { bubbleWindow.close(); } catch (_) {}
+    }
   });
 
   petWindow.on('blur', () => {
@@ -676,23 +777,28 @@ function createTray() {
   }
 
   tray = new Tray(trayIcon);
-  tray.setToolTip('趣宝 🐾');
+  tray.setToolTip('趣宝 🧸');
 
-  const contextMenu = Menu.buildFromTemplate([
-    { label: '显示/隐藏趣宝', click: () => togglePet() },
-    { label: '📝 便签', click: () => createNotesListWindow() },
-    { label: '⏰ 番茄钟', click: () => createPomodoroWindow() },
-    { type: 'separator' },
-    { label: '⚙️ 设置', click: () => createSettingsWindow() },
-    { label: '🔄 检查更新', click: () => checkForUpdates(false) },
-    { type: 'separator' },
-    { label: '退出', click: () => {
-      app.isQuiting = true;
-      app.quit();
-    }}
-  ]);
+  // 动态构建右键菜单：根据宠物当前可见状态显示"隐藏"或"显示"
+  function buildTrayMenu() {
+    const petVisible = petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
+    return Menu.buildFromTemplate([
+      { label: petVisible ? '🧸 隐藏' : '🧸 显示', click: () => togglePet() },
+      { label: '📝 便签', click: () => createNotesListWindow() },
+      { label: '⏰ 番茄钟', click: () => createPomodoroWindow() },
+      { label: '⚙️ 设置', click: () => createSettingsWindow() }
+    ]);
+  }
+  function refreshTrayMenu() {
+    if (tray && !tray.isDestroyed()) tray.setContextMenu(buildTrayMenu());
+  }
+  refreshTrayMenu();
 
-  tray.setContextMenu(contextMenu);
+  // 宠物显示/隐藏时同步刷新菜单标签
+  if (petWindow) {
+    petWindow.on('show', refreshTrayMenu);
+    petWindow.on('hide', refreshTrayMenu);
+  }
 
   // 左键点击托盘图标 → 打开宠物状态面板
   tray.on('click', () => createStatusWindow());
@@ -755,6 +861,109 @@ ipcMain.on('menu:close', () => {
   if (menuWindow && !menuWindow.isDestroyed()) {
     menuWindow.hide();
   }
+});
+
+// ============================================================
+// 1.5 独立对话气泡窗口（挂在宠物头顶，尺寸按文字自适应）
+//   - 不占任务栏、不可聚焦、鼠标穿透到桌面
+//   - 尺寸由 bubble 渲染端测量后上报，主进程 setBounds
+//   - 位置始终跟随宠物窗口头顶
+// ============================================================
+function createBubbleWindow() {
+  if (bubbleWindow && !bubbleWindow.isDestroyed()) return bubbleWindow;
+  bubbleWindow = new BrowserWindow({
+    width: 220,
+    height: 60,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    hasShadow: false,
+    skipTaskbar: true,
+    focusable: false,
+    show: false,             // 初始隐藏，需要 showBubble 才显示
+    movable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  });
+  // 与宠物同样的置顶级别，确保贴屏时不会被其他窗口遮挡
+  try { bubbleWindow.setAlwaysOnTop(true, 'screen-saver'); } catch (_) {}
+  // 让气泡窗口完全鼠标穿透（点击气泡时直接点到桌面上的图标/窗口）
+  try { bubbleWindow.setIgnoreMouseEvents(true, { forward: true }); } catch (_) {}
+  bubbleWindow.loadFile(path.join(__dirname, 'src', 'bubble', 'index.html'));
+  bubbleWindow.on('closed', () => { bubbleWindow = null; });
+  return bubbleWindow;
+}
+
+/** 把气泡窗口锚定到宠物头顶上方（水平居中） */
+function syncBubblePosition() {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  if (!bubbleWindow || bubbleWindow.isDestroyed()) return;
+  try {
+    const [px, py] = petWindow.getPosition();
+    const [pw, ph] = petWindow.getSize();
+    const [bw, bh] = bubbleWindow.getSize();
+    // 水平：气泡中心与宠物中心对齐
+    const bx = Math.round(px + pw / 2 - bw / 2);
+    // 垂直：气泡整个贴在宠物窗口顶部之上（尾巴刚好在宠物顶部边缘，衔接视觉上气泡"长"在宠物头上）
+    const by = py - bh + 2;   // +2 让尾巴和宠物顶部稍微重叠，视觉无断层
+    // 夹在屏幕工作区内，防止跑出屏幕外
+    const { workArea } = screen.getPrimaryDisplay();
+    const safeX = Math.max(workArea.x, Math.min(bx, workArea.x + workArea.width - bw));
+    const safeY = Math.max(workArea.y, Math.min(by, workArea.y + workArea.height - bh));
+    bubbleWindow.setPosition(safeX, safeY, false);
+  } catch (_) {}
+}
+
+/** 显示气泡（文字 + 持续时间，<=0 表示常驻；lowPriority=true 表示弱提示，可被重要提示覆盖且悬停时才显示） */
+function showBubble(text, durationMs, lowPriority = false) {
+  if (!text) return hideBubble();
+  // 如果已有气泡正在显示且是重要提示（非弱提示），新的弱提示不得覆盖它
+  if (lowPriority && bubbleWindow && !bubbleWindow.isDestroyed() && bubbleWindow.isVisible() && !bubbleLowPriority) return;
+  bubbleLowPriority = !!lowPriority;
+  const bw = createBubbleWindow();
+  const sendAndShow = () => {
+    bw.webContents.send('bubble:show', { text, duration: durationMs });
+    syncBubblePosition();
+    try { bw.showInactive(); } catch (_) {}
+  };
+  bw.webContents.once('did-finish-load', sendAndShow);
+  if (!bw.webContents.isLoading()) sendAndShow();
+}
+
+/** 立即隐藏气泡（onlyIfLowPriority=true 时：仅当气泡是弱提示才隐藏，避免把番茄钟等重要提示误关） */
+function hideBubble(onlyIfLowPriority = false) {
+  if (!bubbleWindow || bubbleWindow.isDestroyed()) return;
+  if (onlyIfLowPriority && !bubbleLowPriority) return;
+  bubbleLowPriority = false;
+  try { bubbleWindow.webContents.send('bubble:hide'); } catch (_) {}
+}
+
+// 气泡渲染端测量完尺寸 → 主进程 setBounds，然后重新同步位置
+ipcMain.on('bubble:report-size', (_e, { w, h }) => {
+  if (!bubbleWindow || bubbleWindow.isDestroyed()) return;
+  const W = Math.max(100, Math.min(420, Math.round(w)));
+  const H = Math.max(40,  Math.min(240, Math.round(h)));
+  try { bubbleWindow.setBounds({ width: W, height: H }, false); } catch (_) {}
+  syncBubblePosition();
+});
+
+// 气泡渲染端退场动画结束 → 主进程真正 hide
+ipcMain.on('bubble:hidden', () => {
+  if (!bubbleWindow || bubbleWindow.isDestroyed()) return;
+  try { bubbleWindow.hide(); } catch (_) {}
+});
+
+// 外部触发显示/隐藏气泡
+ipcMain.on('bubble:show', (_e, payload) => {
+  showBubble(payload && payload.text, payload && payload.duration, payload && payload.lowPriority);
+});
+ipcMain.on('bubble:hide', (_e, payload) => {
+  hideBubble(payload && payload.onlyIfLowPriority);
 });
 
 // ============================================================
@@ -923,24 +1132,11 @@ function createPomodoroWindow() {
   pomodoroWindow.webContents.once('did-finish-load', () => {
     // 1) 缩略图只裁"倒计时大字"那块 —— Alt+Tab / 任务栏悬停预览直接显示倒计时
     pomodoro.setThumbnailClipTimer();
-    // 2) 预览底部加 开始/暂停 + 重置 按钮，悬停即可操作
+    // 2) 清空缩略图底部按钮（用户要求去掉暂停和重置按钮）
     pomodoro.refreshThumbar();
     // 3) 同步标题/进度条/UI
     pomodoro.updateTaskbar();
     pomodoro.broadcast();
-  });
-
-  // 任务栏悬停预览底部按钮点击（更可靠的事件监听兜底）
-  pomodoroWindow.on('thumbar-button-clicked', (_e, index) => {
-    if (index === 0) {
-      // 第一个按钮：开始 / 暂停 / 继续
-      if (pomodoro.running) pomodoro.pause();
-      else if (pomodoro.remaining < pomodoro.totalSeconds && pomodoro.remaining > 0) pomodoro.resume();
-      else pomodoro.start(pomodoro.totalSeconds || 25 * 60);
-    } else if (index === 1) {
-      // 第二个按钮：重置
-      pomodoro.reset(pomodoro.totalSeconds || 25 * 60);
-    }
   });
 
   pomodoroWindow.on('closed', () => {
@@ -993,6 +1189,24 @@ function broadcastState() {
   }
   if (petWindow && !petWindow.isDestroyed()) {
     petWindow.webContents.send('state:updated', config.petState);
+  }
+}
+
+// 广播绑定信息变更（昵称、积分）给所有窗口，无需重新打开即可更新
+function broadcastBindInfo() {
+  const bindInfo = {
+    bound: !!config.bind?.openid,
+    nickName: config.bind?.nickName || '',
+    points: config.bind?.points || 0
+  }
+  if (statusWindow && !statusWindow.isDestroyed()) {
+    statusWindow.webContents.send('bind:updated', bindInfo)
+  }
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.webContents.send('bind:updated', bindInfo)
+  }
+  if (bindWindow && !bindWindow.isDestroyed()) {
+    bindWindow.webContents.send('bind:updated', bindInfo)
   }
 }
 
@@ -1266,6 +1480,14 @@ ipcMain.handle('bind:status', async () => {
   if (!openid) return { success: true, bound: false }
   try {
     const result = await callCloudApi('bindStatus', { openid })
+    // 同步更新本地缓存的用户信息
+    if (result.success && result.user) {
+      config.bind.nickName = result.user.nickName || ''
+      config.bind.points = result.user.points || 0
+      saveConfig()
+      // 广播绑定信息变更，让所有已打开窗口（状态面板/宠物窗口等）即时刷新昵称和积分
+      broadcastBindInfo()
+    }
     return result
   } catch (e) {
     return { success: false, error: e.message }
@@ -1278,6 +1500,11 @@ ipcMain.handle('bind:withCode', async (event, code) => {
     const result = await callCloudApi('bindVerify', { code })
     if (result.success) {
       config.bind.openid = result.openid
+      // 保存用户信息（昵称、积分）到本地配置
+      if (result.user) {
+        config.bind.nickName = result.user.nickName || ''
+        config.bind.points = result.user.points || 0
+      }
       if (result.pet) {
         config.petState = {
           level: result.pet.level || 1, exp: result.pet.exp || 0,
@@ -1288,6 +1515,8 @@ ipcMain.handle('bind:withCode', async (event, code) => {
       }
       saveConfig()
       broadcastState()
+      // 通知所有窗口（状态面板/宠物窗口等）绑定信息已变更
+      broadcastBindInfo()
       try {
         const invRes = await callCloudApi('getInventory', { openid: result.openid })
         if (invRes.success) {
@@ -1326,8 +1555,12 @@ ipcMain.handle('bind:sync', async () => {
 // 解除绑定
 ipcMain.on('bind:unbind', () => {
   config.bind.openid = null
+  config.bind.nickName = ''
+  config.bind.points = 0
   config.inventory = []
   saveConfig()
+  // 通知所有窗口绑定已解除
+  broadcastBindInfo()
 })
 
 // 获取物品库存
@@ -1351,6 +1584,13 @@ ipcMain.handle('pomodoro:reset', (_e, totalSeconds) => {
   return pomodoro.getState();
 });
 ipcMain.handle('pomodoro:getState', () => pomodoro.getState());
+// 番茄钟结束闹铃开关
+ipcMain.handle('pomodoro:getSound', () => config.pomodoro?.soundEnabled !== false);
+ipcMain.on('pomodoro:setSound', (_e, enabled) => {
+  if (!config.pomodoro) config.pomodoro = { soundEnabled: true };
+  config.pomodoro.soundEnabled = !!enabled;
+  saveConfig();
+});
 
 // ------- 检查更新 IPC（供设置窗口调用）-------
 ipcMain.handle('app:check-update', () => {
@@ -1392,13 +1632,21 @@ ipcMain.handle('bind:interact', async (event, { action, itemId }) => {
   }
 })
 
-ipcMain.on('autostart:set', (event, enable) => {
+ipcMain.handle('autostart:set', async (event, enable) => {
   config.autoStart = enable;
   saveConfig();
   app.setLoginItemSettings({
     openAtLogin: enable,
     path: process.execPath
   });
+  // 立即回读系统实际状态，确认是否设置成功
+  const actual = app.getLoginItemSettings().openAtLogin;
+  // 如果系统实际状态和期望不一致，更新本地配置以反映真实情况
+  if (actual !== enable) {
+    config.autoStart = actual;
+    saveConfig();
+  }
+  return { success: actual === enable, actual };
 });
 
 // 7.5 窗口通用操作（拖动 / 关闭 / 最小化）
@@ -1487,6 +1735,12 @@ ipcMain.on('window:minimize', (event) => {
   if (win) win.minimize();
 });
 
+// 退出整个应用（由设置窗口的"退出趣宝"按钮触发）
+ipcMain.on('app:quit', () => {
+  app.isQuiting = true;
+  app.quit();
+});
+
 // 7.6 便签相关
 ipcMain.on('note:update', (event, { id, content }) => {
   let note = notesData.find(n => n.id === id);
@@ -1529,15 +1783,35 @@ app.whenReady().then(() => {
   // 启动后 3 秒静默检查更新（有新版本才弹提示，无新版本不打扰用户）
   setTimeout(() => checkForUpdates(true), 3000);
 
-  if (config.autoStart) {
-    app.setLoginItemSettings({
-      openAtLogin: true,
-      path: process.execPath
-    });
+  // 根据配置同步开机自启状态（首次运行 autoStart 默认 true，会自动注册开机启动）
+  app.setLoginItemSettings({
+    openAtLogin: !!config.autoStart,
+    path: process.execPath
+  });
+  // 回读系统实际状态，更新本地配置（防止系统拒绝设置后配置与实际不符）
+  const actualAutoStart = app.getLoginItemSettings().openAtLogin;
+  if (actualAutoStart !== config.autoStart) {
+    config.autoStart = actualAutoStart;
+    saveConfig();
   }
 
   if (config.firstLaunch) {
     createTutorialWindow();
+  }
+
+  // 开机静默刷新绑定信息（已绑定的用户从云端拉取最新昵称/积分，不影响宠物显示）
+  if (config.bind?.openid) {
+    setTimeout(async () => {
+      try {
+        const result = await callCloudApi('bindStatus', { openid: config.bind.openid });
+        if (result.success && result.user) {
+          config.bind.nickName = result.user.nickName || '';
+          config.bind.points = result.user.points || 0;
+          saveConfig();
+          broadcastBindInfo();
+        }
+      } catch (_) {}
+    }, 5000);
   }
 
   app.on('activate', () => {

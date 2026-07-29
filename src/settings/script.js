@@ -15,6 +15,7 @@ const customPlaceholder = document.getElementById('custom-placeholder');
 const customThumb = document.getElementById('custom-thumb');
 const customCharBtn = document.querySelector('.custom-char-btn');
 const autostartToggle = document.getElementById('autostart-toggle');
+const pomoSoundToggle = document.getElementById('pomo-sound-toggle');
 
 petAPI.onConfigInit(async (config) => {
   currentConfig = config;
@@ -36,6 +37,13 @@ petAPI.onConfigInit(async (config) => {
     autostartToggle.checked = isAutoStart;
   } catch (e) {
     autostartToggle.checked = !!config.autoStart;
+  }
+
+  // 番茄钟闹铃开关（默认开启）
+  try {
+    pomoSoundToggle.checked = await petAPI.pomodoroGetSound();
+  } catch (e) {
+    pomoSoundToggle.checked = true;
   }
 });
 
@@ -153,12 +161,33 @@ resetCustomBtn.addEventListener('click', () => {
   customModal.style.display = 'none';
 });
 
-autostartToggle.addEventListener('change', () => {
-  petAPI.setAutoStart(autostartToggle.checked);
+autostartToggle.addEventListener('change', async () => {
+  const want = autostartToggle.checked;
+  try {
+    const res = await petAPI.setAutoStart(want);
+    if (!res || !res.success) {
+      // 系统实际状态与期望不一致 → 回弹开关并提示
+      autostartToggle.checked = res ? res.actual : !want;
+      alert(want ? '开机自启设置失败，可能是系统权限不足。' : '取消开机自启失败，请稍后重试。');
+    }
+  } catch (e) {
+    autostartToggle.checked = !want;
+    alert('设置开机启动时发生错误：' + (e.message || e));
+  }
+});
+
+pomoSoundToggle.addEventListener('change', () => {
+  petAPI.pomodoroSetSound(pomoSoundToggle.checked);
 });
 
 // ------- 检查更新 -------
 const checkUpdateBtn = document.getElementById('check-update-btn');
 checkUpdateBtn.addEventListener('click', () => {
   petAPI.checkUpdate();
+});
+
+// ------- 退出趣宝 -------
+const quitBtn = document.getElementById('quit-btn');
+quitBtn.addEventListener('click', () => {
+  try { petAPI.appQuit(); } catch (e) {}
 });

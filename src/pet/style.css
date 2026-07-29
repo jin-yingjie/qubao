@@ -125,28 +125,7 @@ html, body {
   transform: translate(-50%, 0) scale(1);
 }
 
-/* 5. 小提示文字（鼠标悬停时显示） */
-.tip {
-  position: absolute;
-  bottom: 95px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.95);
-  color: #555;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 11px;
-  white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-.pet-container:hover .tip {
-  opacity: 1;
-  transform: translateX(-50%) translateY(-4px);
-}
+/* 5. 老的 .tip 样式已移除（悬停提示统一走独立气泡窗口，避免与其他气泡重复显示） */
 
 /* 6. 开心动画 */
 @keyframes happyBounce {

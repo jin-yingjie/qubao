@@ -28,15 +28,29 @@ html, body {
   margin-bottom: 8px;
 }
 .pomo-title { font-size: 14px; color: #666; }
-.close-btn {
+.pomo-header-actions {
+  display: flex;
+  gap: 2px;
   -webkit-app-region: no-drag;
+}
+.hdr-btn, .close-btn {
   background: transparent;
   border: none;
-  font-size: 18px;
+  font-size: 14px;
   color: #999;
   cursor: pointer;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
-.close-btn:hover { color: #ff6b6b; }
+.hdr-btn:hover, .close-btn:hover { background: #eee; color: #555; }
+.close-btn { font-size: 18px; }
+.close-btn:hover { color: #ff6b6b; background: #fee; }
 
 .timer-display {
   font-size: 48px;
@@ -68,6 +82,55 @@ html, body {
   color: #fff;
   border-color: #ffb84d;
 }
+.custom-btn { color: #ffb84d; border-color: #ffd9a0; }
+.custom-btn.active { color: #fff; }
+
+/* 自定义倒计时输入面板 */
+.custom-panel {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 12px;
+}
+.custom-panel.show { display: flex; }
+.custom-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.custom-input {
+  width: 48px;
+  padding: 5px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  text-align: center;
+  color: #333;
+  background: #fff;
+}
+.custom-input:focus { outline: none; border-color: #ffb84d; }
+.custom-label { font-size: 13px; color: #666; }
+.custom-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.custom-cancel, .custom-ok {
+  padding: 5px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.custom-cancel { background: #eee; color: #666; }
+.custom-cancel:hover { background: #ddd; }
+.custom-ok { background: #ffb84d; color: #fff; }
+.custom-ok:hover { background: #ff9d1a; }
 
 .controls {
   display: flex;

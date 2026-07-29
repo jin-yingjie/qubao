@@ -13,10 +13,15 @@ const displayEl = document.getElementById('timer');
 const startBtn = document.getElementById('startBtn');
 const resetBtn = document.getElementById('resetBtn');
 const closeBtn = document.getElementById('closeBtn');
+const minimizeBtn = document.getElementById('minimizeBtn');
 
 function fmt(sec) {
-  const m = Math.floor(sec / 60).toString().padStart(2, '0');
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0');
   const s = (sec % 60).toString().padStart(2, '0');
+  if (h > 0) {
+    return `${h.toString().padStart(2, '0')}:${m}:${s}`;
+  }
   return `${m}:${s}`;
 }
 function updateDisplay() {
@@ -41,10 +46,10 @@ function applyState(state) {
   if (typeof state.running === 'boolean') running = state.running;
   updateDisplay();
   updateBtn();
-  // 同步模式按钮高亮（根据 totalSeconds）
+  // 同步模式按钮高亮（根据 totalSeconds，自定义时间不匹配任何预设则高亮"自定义"）
   document.querySelectorAll('.mode-btn').forEach(b => {
-    const mins = parseInt(b.dataset.mins) * 60;
-    if (mins === totalSeconds) b.classList.add('active');
+    const mins = parseInt(b.dataset.mins);
+    if (!isNaN(mins) && mins * 60 === totalSeconds) b.classList.add('active');
     else b.classList.remove('active');
   });
 }
@@ -64,11 +69,13 @@ function applyState(state) {
 petAPI.pomodoroOnTick((state) => {
   applyState(state);
 });
-// 订阅主进程的"计时结束"事件
+// 订阅主进程的"计时结束"事件（提示由宠物对话框显示，不再用 alert）
 petAPI.pomodoroOnFinished(() => {
-  try {
-    alert('🎉 时间到！休息一下吧～');
-  } catch (e) {}
+  // 结束后重置按钮到"开始"状态（双重保险，主进程的 broadcast 也会推一次）
+  running = false;
+  remaining = 0;
+  updateDisplay();
+  updateBtn();
 });
 
 // 开始 / 暂停 / 继续
@@ -100,10 +107,14 @@ resetBtn.addEventListener('click', async () => {
 
 // 模式切换（未运行时直接改总秒数并 reset；运行中则提示用户先暂停或保持模式切换立即生效）
 document.querySelectorAll('.mode-btn').forEach(btn => {
+  // 跳过自定义按钮，它有独立的点击逻辑
+  if (btn.id === 'customBtn') return;
   btn.addEventListener('click', async () => {
     const mins = parseInt(btn.dataset.mins);
     const newTotal = mins * 60;
     totalSeconds = newTotal;
+    // 关闭自定义面板（如果开着）
+    customPanel.classList.remove('show');
     try {
       const st = await petAPI.pomodoroReset(newTotal);
       applyState(st);
@@ -116,4 +127,86 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
   });
 });
 
+// ------- 自定义倒计时 -------
+const customBtn = document.getElementById('customBtn');
+const customPanel = document.getElementById('customPanel');
+const customHours = document.getElementById('customHours');
+const customMins = document.getElementById('customMins');
+const customSecs = document.getElementById('customSecs');
+const customOk = document.getElementById('customOk');
+const customCancel = document.getElementById('customCancel');
+
+customBtn.addEventListener('click', () => {
+  // 切换面板显示/隐藏
+  if (customPanel.classList.contains('show')) {
+    customPanel.classList.remove('show');
+  } else {
+    // 打开时预填当前 totalSeconds（拆成时分秒）
+    const curH = Math.floor(totalSeconds / 3600);
+    const curM = Math.floor((totalSeconds % 3600) / 60);
+    const curS = totalSeconds % 60;
+    customHours.value = curH;
+    customMins.value = curM;
+    customSecs.value = curS;
+    customPanel.classList.add('show');
+    customHours.focus();
+    customHours.select();
+  }
+});
+
+customCancel.addEventListener('click', () => {
+  customPanel.classList.remove('show');
+});
+
+customOk.addEventListener('click', async () => {
+  let h = parseInt(customHours.value);
+  let m = parseInt(customMins.value);
+  let s = parseInt(customSecs.value);
+  if (isNaN(h)) h = 0;
+  if (isNaN(m)) m = 0;
+  if (isNaN(s)) s = 0;
+  if (h < 0) h = 0;
+  if (m < 0) m = 0;
+  if (s < 0) s = 0;
+  if (h > 23) h = 23;
+  if (m > 59) m = 59;
+  if (s > 59) s = 59;
+  const newTotal = h * 3600 + m * 60 + s;
+  if (newTotal <= 0) {
+    // 至少1秒
+    customSecs.value = 1;
+    return;
+  }
+  // 把用户输入写回（避免夹取后用户看到不一致）
+  customHours.value = h;
+  customMins.value = m;
+  customSecs.value = s;
+  totalSeconds = newTotal;
+  customPanel.classList.remove('show');
+  // 清掉其他模式按钮高亮，点亮自定义
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  customBtn.classList.add('active');
+  try {
+    const st = await petAPI.pomodoroReset(newTotal);
+    applyState(st);
+    // applyState 会按 totalSeconds 匹配预设按钮，自定义时间匹配不上会全部取消高亮，这里补回自定义高亮
+    customBtn.classList.add('active');
+  } catch (e) {
+    remaining = newTotal;
+    running = false;
+    updateDisplay();
+    updateBtn();
+  }
+});
+
+// 回车确认
+customHours.addEventListener('keydown', (e) => { if (e.key === 'Enter') customOk.click(); });
+customMins.addEventListener('keydown', (e) => { if (e.key === 'Enter') customOk.click(); });
+customSecs.addEventListener('keydown', (e) => { if (e.key === 'Enter') customOk.click(); });
+
 closeBtn.addEventListener('click', () => petAPI.closeWindow());
+
+// 最小化到任务栏
+minimizeBtn.addEventListener('click', () => {
+  try { petAPI.minimizeWindow(); } catch (e) {}
+});

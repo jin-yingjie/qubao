@@ -10,7 +10,10 @@
     <!-- 顶部 -->
     <div class="pomo-header">
       <span class="pomo-title">⏰ 专注时间</span>
-      <button class="close-btn" id="closeBtn">×</button>
+      <div class="pomo-header-actions">
+        <button class="hdr-btn minimize-btn" id="minimizeBtn" title="最小化到任务栏">─</button>
+        <button class="close-btn" id="closeBtn" title="关闭">×</button>
+      </div>
     </div>
 
     <!-- 倒计时显示 -->
@@ -21,6 +24,23 @@
       <button class="mode-btn active" data-mins="25">专注</button>
       <button class="mode-btn" data-mins="5">短休</button>
       <button class="mode-btn" data-mins="15">长休</button>
+      <button class="mode-btn custom-btn" id="customBtn" title="自定义倒计时">自定义</button>
+    </div>
+
+    <!-- 自定义倒计时输入面板 -->
+    <div class="custom-panel" id="customPanel">
+      <div class="custom-row">
+        <input type="number" id="customHours" min="0" max="23" value="0" class="custom-input">
+        <span class="custom-label">时</span>
+        <input type="number" id="customMins" min="0" max="59" value="30" class="custom-input">
+        <span class="custom-label">分</span>
+        <input type="number" id="customSecs" min="0" max="59" value="0" class="custom-input">
+        <span class="custom-label">秒</span>
+      </div>
+      <div class="custom-actions">
+        <button class="custom-cancel" id="customCancel">取消</button>
+        <button class="custom-ok" id="customOk">确定</button>
+      </div>
     </div>
 
     <!-- 控制按钮 -->

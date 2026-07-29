@@ -1,0 +1,75 @@
+/* src/bubble/style.css - 独立对话气泡组件样式
+ * 气泡尺寸完全由内容驱动：width: fit-content + max-width 限制 + 换行
+ * 布局：气泡主体居中，下方带小尾巴指向宠物头部（尾巴水平居中）
+ */
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: "Microsoft YaHei", -apple-system, "PingFang SC", "Segoe UI Emoji", sans-serif;
+  user-select: none;
+}
+
+/* 气泡根容器：填满整个透明 BrowserWindow，用于把"气泡主体+尾巴"放在窗口底部（尾巴贴底以便指向宠物） */
+.bubble-root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 2px 4px 0 4px;   /* 顶部左右最小留空，避免阴影被裁剪 */
+}
+
+/* 对话主体（半透明毛玻璃风格，窗口背景是透明的，视觉上气泡呈浮于桌面之上的朦胧效果） */
+.bubble-body {
+  max-width: 360px;          /* 最大宽度，防止一行太长 */
+  width: fit-content;        /* 宽度自适应文字内容 */
+  min-width: 80px;           /* 最小宽度，避免单字太窄 */
+  background: rgba(255, 255, 255, 0.6);
+  color: #1f1f1f;
+  border-radius: 12px;
+  padding: 4px 10px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10), inset 0 1px 0 rgba(255,255,255,0.5);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
+}
+
+/* 文字样式 */
+.bubble-text {
+  display: block;
+  font-size: 13px;
+  line-height: 1.55;
+  font-weight: 500;
+  white-space: pre-wrap;      /* 保留换行，超长自动换行 */
+  word-break: break-word;     /* 英文长单词/URL 折行 */
+  overflow-wrap: break-word;
+}
+
+/* 气泡小尾巴（指向下方宠物头，与主体保持同色半透明） */
+.bubble-tail {
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid rgba(255, 255, 255, 0.6);
+  margin-top: -1px;          /* 与主体无缝衔接 */
+  filter: drop-shadow(0 3px 2px rgba(0,0,0,0.06));
+}
+
+/* 入场/退场动画（由 script.js 加/去 .show 触发） */
+.bubble-root {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  pointer-events: none;       /* 气泡窗口不可点击（鼠标穿透到桌面） */
+}
+.bubble-root.show {
+  opacity: 1;
+  transform: translateY(0);
+}

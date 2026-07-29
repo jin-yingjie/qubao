@@ -1,0 +1,28 @@
+<!-- ============================================================
+     src/bubble/index.html - 独立对话气泡组件窗口
+     ============================================================
+     特点：
+       1. 透明背景 + 无边框
+       2. 尺寸完全由文字内容驱动（主进程根据测量结果 setSize）
+       3. 永远跟随宠物头顶移动
+       4. 不抢占焦点（focusable:false）
+     ============================================================ -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Bubble</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="bubble" class="bubble-root">
+    <!-- 对话主体（带小尾巴指向宠物） -->
+    <div id="bubble-body" class="bubble-body">
+      <span id="bubble-text" class="bubble-text"></span>
+    </div>
+    <!-- 气泡小尾巴（指向下方宠物头部） -->
+    <div class="bubble-tail"></div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>

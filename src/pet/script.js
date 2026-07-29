@@ -157,6 +157,7 @@ function clearAction() {
 function showMoodBubble(emoji, duration = 2000) {
   if (!moodBubble) return;
   moodBubble.textContent = emoji;
+  moodBubble.classList.remove('text'); // 纯 emoji 用默认样式
   moodBubble.classList.add('show');
 
   const activePet = getActivePet();
@@ -170,6 +171,12 @@ function showMoodBubble(emoji, duration = 2000) {
   moodBubbleTimer = setTimeout(() => {
     moodBubble.classList.remove('show');
   }, duration);
+}
+
+// ------- 文字对话框气泡（通过独立 Bubble 窗口显示，按文字长度自适应，不占宠物窗口） -------
+function showTextBubble(text, duration = 4000) {
+  if (!window.petAPI) return;
+  try { petAPI.bubbleShow(text, duration); } catch (_) {}
 }
 
 // ------- 随机冒气泡 -------
@@ -232,10 +239,12 @@ function initAllEventListeners() {
   try {
     petAPI.onStateInit((state) => {
       petState = state;
+      window.__petStateInited__ = true;
       updateMoodVisual();
     });
     petAPI.onStateUpdated((state) => {
       petState = state;
+      window.__petStateInited__ = true;
       updateMoodVisual();
     });
   } catch (e) { console.error('[pet] 状态监听注册失败:', e); }
@@ -269,6 +278,16 @@ function initAllEventListeners() {
       setTimeout(() => levelupFx.classList.remove('show'), 2000);
     });
   } catch (e) { console.error('[pet] 升级监听注册失败:', e); }
+
+  // ------- 番茄钟结束提示：直接通过主进程 showBubble()，这里不需要额外处理 -------
+
+  // ------- 鼠标悬停在宠物身上 → 显示弱提示"点我 🐾"（与重要提示共用气泡窗口，不重复显示）-------
+  petContainer.addEventListener('mouseenter', () => {
+    try { petAPI.bubbleShow('你好~主人！', 0, true); } catch (_) {} // duration=0 常驻，mouseleave 才消
+  });
+  petContainer.addEventListener('mouseleave', () => {
+    try { petAPI.bubbleHide(true); } catch (_) {} // onlyIfLowPriority=true：只关弱提示，不关重要提示
+  });
 
   // ------- 鼠标拖拽 + 点击喂养 -------
   petContainer.addEventListener('mousedown', (e) => {
@@ -319,13 +338,38 @@ function initAllEventListeners() {
   // ------- 启动定时任务 -------
   scheduleNextBubble();
   scheduleIdleAction();
+
+  // ------- 兜底：300ms 后若 config/state 初始化消息丢失，主动 invoke 拉一次 -------
+  ensureInitialStateFallback();
 }
 
-// ------- 启动入口 -------
-function boot() {
-  initDomRefs();
-  injectPetImages();
-  initAllEventListeners();
+// ------- 主动兜底：极端时序下 did-finish-load 在监听注册前触发，导致 config:init / state:init 丢失 -------
+// 延迟 300ms 后检查：如果 currentConfig 或 petState 仍是默认值，主动 invoke 拉一次
+function ensureInitialStateFallback() {
+  setTimeout(async () => {
+    try {
+      if (!window.petAPI) return;
+      if (!currentConfig) {
+        const cfg = await petAPI.getConfig();
+        if (cfg) {
+          currentConfig = cfg;
+          applyConfig(cfg);
+          console.log('[pet] 兜底：通过 config:get 拿到初始配置');
+        }
+      }
+      // 检查 petState 是否仍是默认值（未被 onStateInit 设置过的标志：petState 没同步过则 level=1 exp=0... 不一定可靠，
+      // 这里换一个办法：如果 onStateInit 被执行过，applyConfig/config:init 的逻辑也会同步，
+      // 更可靠的办法是对比 onStateInit 是否执行 → 用一个标记位）
+      if (!window.__petStateInited__) {
+        const st = await petAPI.getState();
+        if (st) {
+          petState = st;
+          updateMoodVisual();
+          console.log('[pet] 兜底：通过 state:get 拿到初始状态');
+        }
+      }
+    } catch (_) {}
+  }, 300);
 }
 
 if (document.readyState === 'loading') {

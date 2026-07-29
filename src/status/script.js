@@ -52,14 +52,18 @@ const cardTitle = document.getElementById('card-title');
 async function refreshTitle() {
   try {
     const status = await petAPI.getBindStatus();
-    if (status.success && status.bound && status.user && status.user.nickName) {
-      cardTitle.textContent = status.user.nickName + '的趣宝桌宠';
-      loginBtn.style.display = 'none';
-    } else {
-      cardTitle.textContent = '趣宝桌宠';
-      loginBtn.style.display = 'inline-block';
-    }
+    applyBindInfo(status.success && status.bound, status.user ? status.user.nickName : '')
   } catch (e) {
+    applyBindInfo(false, '')
+  }
+}
+
+// 应用绑定信息到 UI（供本地广播与云端查询复用）
+function applyBindInfo(bound, nickName) {
+  if (bound && nickName) {
+    cardTitle.textContent = nickName + '的趣宝桌宠';
+    loginBtn.style.display = 'none';
+  } else {
     cardTitle.textContent = '趣宝桌宠';
     loginBtn.style.display = 'inline-block';
   }
@@ -67,6 +71,11 @@ async function refreshTitle() {
 
 loginBtn.addEventListener('click', () => {
   petAPI.menuAction('bind');
+});
+
+// 监听主进程的绑定信息变更广播（绑定/解绑/同步后立即刷新，无需重新打开窗口）
+petAPI.onBindUpdated((bindInfo) => {
+  applyBindInfo(bindInfo.bound, bindInfo.nickName);
 });
 
 // 初始化时查询绑定状态

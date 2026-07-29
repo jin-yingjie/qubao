@@ -281,3 +281,17 @@ h2 {
   background: #ffb84d;
   color: #fff;
 }
+.quit-btn {
+  padding: 6px 16px;
+  border: 1px solid #ccc;
+  background: #f5f5f5;
+  color: #888;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+.quit-btn:hover {
+  background: #e8e8e8;
+  color: #555;
+}

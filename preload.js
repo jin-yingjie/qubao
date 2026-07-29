@@ -16,6 +16,22 @@ try {
 }
 
 contextBridge.exposeInMainWorld('petAPI', {
+  // ------- 独立对话气泡窗口 -------
+  // （由渲染进程告诉主进程"显示/隐藏"，主进程负责窗口位置/大小与跟随宠物）
+  // lowPriority: 弱提示（如悬停"点我"），不会覆盖正在显示的重要提示（如番茄钟结束）
+  bubbleShow: (text, duration, lowPriority) => ipcRenderer.send('bubble:show', { text, duration, lowPriority }),
+  bubbleHide: (onlyIfLowPriority) => ipcRenderer.send('bubble:hide', { onlyIfLowPriority }),
+  onBubbleShow: (callback) => {
+    ipcRenderer.on('bubble:show', (_e, payload) => callback(payload));
+  },
+  onBubbleHide: (callback) => {
+    ipcRenderer.on('bubble:hide', () => callback());
+  },
+  // 气泡渲染端测量完尺寸后通知主进程 setBounds
+  bubbleReportSize: (w, h) => ipcRenderer.send('bubble:report-size', { w, h }),
+  // 气泡退场动画结束后通知主进程 hide 窗口
+  bubbleHidden: () => ipcRenderer.send('bubble:hidden'),
+
   // ------- 桌宠相关 -------
   // 获取内嵌的 base64 宠物图片（不依赖文件系统，即使 PNG 被删也能显示）
   getPetImages: () => PET_IMAGES,
@@ -66,6 +82,8 @@ contextBridge.exposeInMainWorld('petAPI', {
   minimizeWindow: () => {
     ipcRenderer.send('window:minimize');
   },
+  // 退出整个应用
+  appQuit: () => ipcRenderer.send('app:quit'),
 
   // ------- 便签相关 -------
   onNoteInit: (callback) => {
@@ -127,9 +145,7 @@ contextBridge.exposeInMainWorld('petAPI', {
 
   // ------- 开机启动相关 -------
   getAutoStart: () => ipcRenderer.invoke('autostart:get'),
-  setAutoStart: (enable) => {
-    ipcRenderer.send('autostart:set', enable);
-  },
+  setAutoStart: (enable) => ipcRenderer.invoke('autostart:set', enable),
 
   // ------- 小程序绑定相关 -------
   getBindStatus: () => ipcRenderer.invoke('bind:status'),
@@ -138,6 +154,10 @@ contextBridge.exposeInMainWorld('petAPI', {
   unbind: () => ipcRenderer.send('bind:unbind'),
   getInventory: () => ipcRenderer.invoke('inventory:get'),
   interactRemote: (action, itemId) => ipcRenderer.invoke('bind:interact', { action, itemId }),
+  // 监听绑定信息变更（昵称、积分更新）— 无需重新打开窗口即可刷新
+  onBindUpdated: (callback) => {
+    ipcRenderer.on('bind:updated', (_event, bindInfo) => callback(bindInfo));
+  },
 
   // ------- 番茄钟（主进程计时，最小化后任务栏仍能显示倒计时）-------
   pomodoroStart: (totalSeconds) => ipcRenderer.invoke('pomodoro:start', totalSeconds),
@@ -150,6 +170,13 @@ contextBridge.exposeInMainWorld('petAPI', {
   },
   pomodoroOnFinished: (callback) => {
     ipcRenderer.on('pomodoro:finished', () => callback());
+  },
+  // 番茄钟结束闹铃开关
+  pomodoroGetSound: () => ipcRenderer.invoke('pomodoro:getSound'),
+  pomodoroSetSound: (enabled) => ipcRenderer.send('pomodoro:setSound', enabled),
+  // 番茄钟结束 → 宠物对话框气泡显示
+  onPomodoroPetDialog: (callback) => {
+    ipcRenderer.on('pomodoro:pet-dialog', (_e, text) => callback(text));
   },
 
   // ------- 检查更新 -------
