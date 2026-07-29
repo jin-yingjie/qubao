@@ -30,7 +30,6 @@ let pomodoroWindow = null;  // 番茄钟窗口
 let statusWindow = null;    // 状态面板窗口
 let tutorialWindow = null;  // 新手教程窗口
 let bindWindow = null;        // 绑定小程序窗口
-const https = require('https'); // 用于调用云函数HTTP触发
 let isDragging = false;     // 拖动中标志，用于跳过 moved 事件的高频干扰
 let dragState = null;       // 拖动状态（窗口起点+鼠标起点）
 
