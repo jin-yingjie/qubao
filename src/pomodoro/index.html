@@ -30,11 +30,23 @@
     <!-- 自定义倒计时输入面板 -->
     <div class="custom-panel" id="customPanel">
       <div class="custom-row">
-        <input type="number" id="customHours" min="0" max="23" value="0" class="custom-input">
+        <div class="spinner-group">
+          <button class="spinner-btn" data-target="customHours" data-dir="1">▲</button>
+          <input type="number" id="customHours" min="0" max="23" value="0" class="custom-input">
+          <button class="spinner-btn" data-target="customHours" data-dir="-1">▼</button>
+        </div>
         <span class="custom-label">时</span>
-        <input type="number" id="customMins" min="0" max="59" value="30" class="custom-input">
+        <div class="spinner-group">
+          <button class="spinner-btn" data-target="customMins" data-dir="1">▲</button>
+          <input type="number" id="customMins" min="0" max="59" value="30" class="custom-input">
+          <button class="spinner-btn" data-target="customMins" data-dir="-1">▼</button>
+        </div>
         <span class="custom-label">分</span>
-        <input type="number" id="customSecs" min="0" max="59" value="0" class="custom-input">
+        <div class="spinner-group">
+          <button class="spinner-btn" data-target="customSecs" data-dir="1">▲</button>
+          <input type="number" id="customSecs" min="0" max="59" value="0" class="custom-input">
+          <button class="spinner-btn" data-target="customSecs" data-dir="-1">▼</button>
+        </div>
         <span class="custom-label">秒</span>
       </div>
       <div class="custom-actions">

@@ -136,6 +136,24 @@ const customSecs = document.getElementById('customSecs');
 const customOk = document.getElementById('customOk');
 const customCancel = document.getElementById('customCancel');
 
+// 输入框 clamp：小时 0-23，分秒 0-59
+function clampInput(input, max) {
+  let v = parseInt(input.value);
+  if (isNaN(v) || v < 0) v = 0;
+  if (v > max) v = max;
+  input.value = v;
+}
+
+// 上下按钮循环调整
+function spinInput(input, dir, max) {
+  let v = parseInt(input.value);
+  if (isNaN(v)) v = 0;
+  v += dir;
+  if (v > max) v = 0;   // 超过最大值循环到 0
+  if (v < 0) v = max;   // 小于 0 循环到最大值
+  input.value = v;
+}
+
 customBtn.addEventListener('click', () => {
   // 切换面板显示/隐藏
   if (customPanel.classList.contains('show')) {
@@ -158,22 +176,36 @@ customCancel.addEventListener('click', () => {
   customPanel.classList.remove('show');
 });
 
+// 输入时实时 clamp
+customHours.addEventListener('input', () => clampInput(customHours, 23));
+customMins.addEventListener('input', () => clampInput(customMins, 59));
+customSecs.addEventListener('input', () => clampInput(customSecs, 59));
+
+// 上下按钮点击
+document.querySelectorAll('.spinner-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const targetId = btn.dataset.target;
+    const dir = parseInt(btn.dataset.dir);
+    const input = document.getElementById(targetId);
+    const max = targetId === 'customHours' ? 23 : 59;
+    spinInput(input, dir, max);
+  });
+});
+
 customOk.addEventListener('click', async () => {
   let h = parseInt(customHours.value);
   let m = parseInt(customMins.value);
   let s = parseInt(customSecs.value);
-  if (isNaN(h)) h = 0;
-  if (isNaN(m)) m = 0;
-  if (isNaN(s)) s = 0;
-  if (h < 0) h = 0;
-  if (m < 0) m = 0;
-  if (s < 0) s = 0;
+  if (isNaN(h) || h < 0) h = 0;
+  if (isNaN(m) || m < 0) m = 0;
+  if (isNaN(s) || s < 0) s = 0;
   if (h > 23) h = 23;
   if (m > 59) m = 59;
   if (s > 59) s = 59;
   const newTotal = h * 3600 + m * 60 + s;
   if (newTotal <= 0) {
     // 至少1秒
+    s = 1;
     customSecs.value = 1;
     return;
   }

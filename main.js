@@ -413,28 +413,25 @@ const pomodoro = {
       }
       // 1) 让宠物头顶气泡显示提示（独立气泡窗口，按文字长度自适应宽度）
       showBubble('🎉 番茄钟时间到！休息一下吧～', 5000);
-      if (!petWindow || petWindow.isDestroyed()) {
-        // 宠物窗口不在，走系统通知兜底
+      // 2) 系统通知 + 闹铃提醒（受用户配置控制，默认开启）
+      try {
+        const { Notification } = require('electron');
+        const iconPath = path.join(__dirname, 'assets', 'icon.png');
+        const n = new Notification({
+          title: '番茄钟 时间到！',
+          body: '🎉 休息一下吧～',
+          icon: fs.existsSync(iconPath) ? iconPath : undefined,
+          silent: true   // 用自定义闹铃，通知静音避免双重声音
+        });
+        n.show();
+      } catch (_) {}
+      if (config.pomodoro?.soundEnabled !== false) {
+        // 用系统蜂鸣 + 多次延迟响铃，确保用户能听见
         try {
-          const { Notification } = require('electron');
-          const n = new Notification({
-            title: '番茄钟 时间到！',
-            body: '🎉 休息一下吧～',
-            icon: path.join(__dirname, 'assets', 'icon.png'),
-            silent: false
-          });
-          n.show();
+          const beepTimes = [0, 400, 800, 1200, 1600, 2000];
+          beepTimes.forEach(t => setTimeout(() => shell.beep(), t));
         } catch (_) {}
       }
-      // 2) 闹铃提醒（受用户配置控制，默认开启）
-      try {
-        if (config.pomodoro?.soundEnabled !== false) {
-          // 用 shell.beep 触发系统提示音；连续响 3 次更易听见
-          shell.beep();
-          setTimeout(() => shell.beep(), 600);
-          setTimeout(() => shell.beep(), 1200);
-        }
-      } catch (_) {}
       pomodoro.resetTaskbarAfter();
     }
   },
