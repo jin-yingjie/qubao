@@ -1813,7 +1813,22 @@ app.whenReady().then(() => {
   // 启动后 3 秒静默检查更新（有新版本才弹提示，无新版本不打扰用户）
   setTimeout(() => checkForUpdates(true), 3000);
 
-  // 根据配置同步开机自启状态（首次运行 autoStart 默认 true，会自动注册开机启动）
+  // 首次启动时检查 NSIS 安装界面的开机启动选择
+  if (config.firstLaunch) {
+    try {
+      const autostartFlag = path.join(path.dirname(process.execPath), '.autostart');
+      if (fs.existsSync(autostartFlag)) {
+        // 用户在安装时勾选了开机启动
+        config.autoStart = true;
+        fs.unlinkSync(autostartFlag); // 读取后删除标记文件
+      } else {
+        // 用户在安装时取消勾选
+        config.autoStart = false;
+      }
+      saveConfig();
+    } catch (_) {}
+  }
+  // 根据配置同步开机自启状态（只要 config.autoStart 为 true 就保持开机启动）
   app.setLoginItemSettings({
     openAtLogin: !!config.autoStart,
     path: process.execPath
