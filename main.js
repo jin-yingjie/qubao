@@ -185,72 +185,65 @@ function saveNotes() {
 
 
 // ============================================================
-// 云函数调用工具（通过腾讯云 TCB API InvokeCloudFunction 调用 petApi）
-//   - 使用 TC3-HMAC-SHA256 签名算法
-//   - 仅需 QcloudTCBFullAccess 权限即可（云开发全读写）
+// 云函数调用工具（通过 TCB HTTP API 调用 petApi）
+//   - 使用 TC3-HMAC-SHA256 签名认证
+//   - URL 格式: https://{env-id}.api.tcloudbasegateway.com/v1/functions/{function-name}?webfn=true
 // ============================================================
 
-// ⚠️ 安全提示：以下密钥会打包进安装包，理论上可被反编译提取。
-//    建议在腾讯云后台创建子账号，仅授予 QcloudTCBFullAccess 权限。
+const CLOUD_ENV_ID = 'cloud1-d9gjbey4a7a8fd907';
+const CLOUD_FUNCTION_NAME = 'petApi';
 const CLOUD_SECRET_ID = 'AKIDOsCJDweBUm4IKQVRHwT0a8kEYifQyMZ3';
 const CLOUD_SECRET_KEY = 'NYYL3av67xZKyUzRk5NViiV4PYUChz3v';
-const CLOUD_ENV_ID = 'cloud1-d9gjbey4a7a8fd907';
-const TCB_HOST = 'tcb.tencentcloudapi.com';
-const TCB_SERVICE = 'tcb';
-const TCB_VERSION = '2018-06-08';
-const TCB_REGION = 'ap-shanghai';
+
+// TC3-HMAC-SHA256 签名生成
+function getTC3Signature(secretKey, date, service, stringToSign) {
+  const secretDate = crypto.createHmac('sha256', 'TC3' + secretKey).update(date).digest();
+  const secretService = crypto.createHmac('sha256', secretDate).update(service).digest();
+  const secretSigning = crypto.createHmac('sha256', secretService).update('tc3_request').digest();
+  return crypto.createHmac('sha256', secretSigning).update(stringToSign).digest('hex');
+}
 
 function callCloudApi(action, data) {
   return new Promise((resolve, reject) => {
-    // 1. 构造云函数请求参数（ClientContext 是 JSON 字符串）
     const clientContext = JSON.stringify({ action: action, ...data });
+    const body = clientContext;
 
-    // 2. 构造 TCB InvokeCloudFunction 请求体
-    const body = JSON.stringify({
-      EnvId: CLOUD_ENV_ID,
-      FunctionName: 'petApi',
-      InvokeType: 'RequestResponse',
-      ClientContext: clientContext
-    });
-
-    // 3. 生成 TC3-HMAC-SHA256 签名
     const timestamp = Math.floor(Date.now() / 1000);
-    const date = new Date(timestamp * 1000).toISOString().slice(0, 10);
+    const date = new Date().toISOString().substring(0, 10);
+    const service = 'tcb';
+    const host = `${CLOUD_ENV_ID}.api.tcloudbasegateway.com`;
+    const path = `/v1/functions/${CLOUD_FUNCTION_NAME}`;
+    const queryString = 'webfn=true';
+    const url = `https://${host}${path}?${queryString}`;
 
-    // 3.1 规范请求串 (CanonicalRequest)
-    const canonicalHeaders = `content-type:application/json; charset=utf-8\nhost:${TCB_HOST}\n`;
-    const signedHeaders = 'content-type;host';
+    // 生成 TC3 签名
+    const httpRequestMethod = 'POST';
+    const canonicalUri = path;
+    const canonicalQueryString = queryString;
+    const contentType = 'application/json; charset=utf-8';
+    const canonicalHeaders = `content-type:${contentType}\nhost:${host}\nx-tc-action:httpinvoke\n`;
+    const signedHeaders = 'content-type;host;x-tc-action';
     const hashedRequestPayload = crypto.createHash('sha256').update(body).digest('hex');
-    const canonicalRequest = `POST\n/\n\n${canonicalHeaders}\n${signedHeaders}\n${hashedRequestPayload}`;
-
-    // 3.2 待签名串 (StringToSign)
-    const credentialScope = `${date}/${TCB_SERVICE}/tc3_request`;
+    const canonicalRequest = `${httpRequestMethod}\n${canonicalUri}\n${canonicalQueryString}\n${canonicalHeaders}\n${signedHeaders}\n${hashedRequestPayload}`;
+    const algorithm = 'TC3-HMAC-SHA256';
+    const credentialScope = `${date}/${service}/tc3_request`;
     const hashedCanonicalRequest = crypto.createHash('sha256').update(canonicalRequest).digest('hex');
-    const stringToSign = `TC3-HMAC-SHA256\n${timestamp}\n${credentialScope}\n${hashedCanonicalRequest}`;
+    const stringToSign = `${algorithm}\n${timestamp}\n${credentialScope}\n${hashedCanonicalRequest}`;
+    const signature = getTC3Signature(CLOUD_SECRET_KEY, date, service, stringToSign);
 
-    // 3.3 计算签名 (Signature)
-    const secretDate = crypto.createHmac('sha256', 'TC3' + CLOUD_SECRET_KEY).update(date).digest();
-    const secretService = crypto.createHmac('sha256', secretDate).update(TCB_SERVICE).digest();
-    const secretSigning = crypto.createHmac('sha256', secretService).update('tc3_request').digest();
-    const signature = crypto.createHmac('sha256', secretSigning).update(stringToSign).digest('hex');
+    const authorization = `${algorithm} Credential=${CLOUD_SECRET_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}, Timestamp=${timestamp}`;
 
-    // 3.4 Authorization 头
-    const authorization = `TC3-HMAC-SHA256 Credential=${CLOUD_SECRET_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+    console.log(`[callCloudApi] action=${action} | URL=${url}`);
 
-    // 4. 发送 HTTPS 请求
-    console.log(`[callCloudApi] action=${action} | data=`, data);
     const options = {
-      hostname: TCB_HOST,
-      path: '/',
+      hostname: host,
+      path: `${path}?${queryString}`,
       method: 'POST',
       headers: {
         'Authorization': authorization,
-        'Content-Type': 'application/json; charset=utf-8',
-        'Host': TCB_HOST,
-        'X-TC-Action': 'InvokeCloudFunction',
-        'X-TC-Version': TCB_VERSION,
-        'X-TC-Timestamp': timestamp.toString(),
-        'X-TC-Region': TCB_REGION,
+        'Content-Type': contentType,
+        'Host': host,
+        'X-Tc-Action': 'httpinvoke',
         'Content-Length': Buffer.byteLength(body)
       }
     };
@@ -260,28 +253,29 @@ function callCloudApi(action, data) {
       res.on('data', (chunk) => responseBody += chunk);
       res.on('end', () => {
         console.log(`[callCloudApi] 响应状态: ${res.statusCode} | body=`, responseBody.substring(0, 500));
+
+        if (res.statusCode === 401 || res.statusCode === 403) {
+          reject(new Error('云函数访问被拒绝(状态码' + res.statusCode + ')，请检查 SecretId/SecretKey 是否正确'));
+          return;
+        }
+
         try {
           const parsed = JSON.parse(responseBody);
-          // TCB API 响应格式: { Response: { Result: "字符串", Error: {...}, RequestId: "..." } }
-          if (parsed.Response) {
-            if (parsed.Response.Error) {
-              console.error('[callCloudApi] API错误:', parsed.Response.Error);
-              reject(new Error(`云API错误: ${parsed.Response.Error.Message || '未知错误'}`));
-              return;
-            }
-            // TCB InvokeCloudFunction 的 Result 是云函数返回值的 JSON 字符串
-            const result = parsed.Response.Result;
-            if (result) {
-              try { resolve(JSON.parse(result)); }
-              catch (e) { reject(new Error('解析云函数返回值失败: ' + String(result).substring(0, 200))); }
-            } else {
-              resolve(parsed.Response);
-            }
-          } else {
+          if (parsed.RetMsg) {
+            try { resolve(JSON.parse(parsed.RetMsg)); }
+            catch (e) { reject(new Error('解析 RetMsg 失败: ' + String(parsed.RetMsg).substring(0, 200))); }
+          } else if (parsed.success !== undefined || parsed.code !== undefined) {
             resolve(parsed);
+          } else if (parsed.Response && parsed.Response.Result) {
+            const r = parsed.Response.Result;
+            if (typeof r === 'string') { try { resolve(JSON.parse(r)); } catch(e) { reject(new Error('解析Result失败')); } }
+            else if (r.RetMsg) { try { resolve(JSON.parse(r.RetMsg)); } catch(e) { reject(new Error('解析RetMsg失败')); } }
+            else { resolve(r); }
+          } else {
+            reject(new Error('云函数返回格式异常: ' + responseBody.substring(0, 200)));
           }
         } catch (e) {
-          reject(new Error('解析响应失败: ' + responseBody.substring(0, 200)));
+          reject(new Error('解析云函数响应失败: ' + responseBody.substring(0, 200)));
         }
       });
     });
