@@ -21,6 +21,44 @@ const APP_VERSION = require('./package.json').version || '0.0.0';
 const GITHUB_OWNER = 'jin-yingjie';
 const GITHUB_REPO = 'qubao';
 
+// ------- 启动日志文件（用于诊断"安装后宠物不显示"类问题） -------
+const LOG_FILE = path.join(app.getPath('userData'), 'qubao.log');
+const _origLog = console.log;
+const _origErr = console.error;
+function _ts() { return new Date().toISOString().replace('T', ' ').slice(0, 23); }
+console.log = function () { const s = '[' + _ts() + '] ' + Array.from(arguments).map(String).join(' '); _origLog(s); try { fs.appendFileSync(LOG_FILE, s + '\n'); } catch (_) {} };
+console.error = function () { const s = '[' + _ts() + '] [ERR] ' + Array.from(arguments).map(String).join(' '); _origErr(s); try { fs.appendFileSync(LOG_FILE, s + '\n'); } catch (_) {} };
+
+console.log('========== 趣宝启动 ==========');
+console.log('version:', APP_VERSION);
+console.log('process.execPath:', process.execPath);
+console.log('__dirname:', __dirname);
+console.log('userData:', app.getPath('userData'));
+console.log('argv:', process.argv.join(' '));
+
+// ------- 单例锁：防止多实例同时运行导致窗口冲突 -------
+if (!app.requestSingleInstanceLock()) {
+  console.log('已有实例在运行，本进程退出');
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    console.log('收到 second-instance，尝试聚焦主窗口');
+    if (petWindow) {
+      if (petWindow.isMinimized()) petWindow.restore();
+      petWindow.show();
+      petWindow.focus();
+    }
+  });
+}
+
+// 捕获未处理异常，写入日志文件，避免静默崩溃
+process.on('uncaughtException', (err) => {
+  console.error('uncaughtException:', err && err.stack ? err.stack : err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('unhandledRejection:', reason);
+});
+
 // ------- 全局变量 -------
 let petWindow = null;       // 桌宠主窗口
 let tray = null;            // 系统托盘
@@ -627,54 +665,66 @@ function createBindWindow() {
 // 1. 创建桌宠窗口
 // ============================================================
 function createPetWindow() {
-  const { workArea } = screen.getPrimaryDisplay();
-  const winW = 60;   // 桌宠窗口宽度
-  const winH = 120;  // 桌宠窗口高度（上 60 气泡区 + 下 60 图区）
+  try {
+    const { workArea } = screen.getPrimaryDisplay();
+    const winW = 60;   // 桌宠窗口宽度
+    const winH = 120;  // 桌宠窗口高度（上 60 气泡区 + 下 60 图区）
 
-  // 默认位置：屏幕右下角，保证在 workArea 内
-  const savedX = config.position.x;
-  const savedY = config.position.y;
-  let x = (savedX !== null && savedX !== undefined) ? savedX : (workArea.x + workArea.width - winW - 40);
-  let y = (savedY !== null && savedY !== undefined) ? savedY : (workArea.y + workArea.height - winH - 80);
+    // 默认位置：屏幕右下角，保证在 workArea 内
+    const savedX = config.position.x;
+    const savedY = config.position.y;
+    let x = (savedX !== null && savedX !== undefined) ? savedX : (workArea.x + workArea.width - winW - 40);
+    let y = (savedY !== null && savedY !== undefined) ? savedY : (workArea.y + workArea.height - winH - 80);
 
-  // 强制夹在 workArea 内部，防止屏幕外
-  x = Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - winW));
-  y = Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - winH));
+    // 强制夹在 workArea 内部，防止屏幕外
+    x = Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - winW));
+    y = Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - winH));
 
-  console.log('[createPetWindow] 初始位置 x=' + x + ', y=' + y + ', workArea=' + JSON.stringify(workArea));
+    console.log('[createPetWindow] 初始位置 x=' + x + ', y=' + y + ', workArea=' + JSON.stringify(workArea));
 
-  petWindow = new BrowserWindow({
-    width: winW,
-    height: winH,
-    x: x,
-    y: y,
-    frame: false,           // 无边框
-    transparent: true,      // 透明背景
-    alwaysOnTop: config.pet.alwaysOnTop,
-    resizable: false,
-    hasShadow: false,
-    skipTaskbar: true,
-    show: false,            // 先不显示，等 did-finish-load 再显示
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false
+    petWindow = new BrowserWindow({
+      width: winW,
+      height: winH,
+      x: x,
+      y: y,
+      frame: false,           // 无边框
+      transparent: true,      // 透明背景
+      alwaysOnTop: config.pet.alwaysOnTop,
+      resizable: false,
+      hasShadow: false,
+      skipTaskbar: true,
+      show: false,            // 先不显示，等 ready-to-show / 超时再显示
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false
+      }
+    });
+
+    if (config.pet.alwaysOnTop) {
+      petWindow.setAlwaysOnTop(true, 'screen-saver');
     }
-  });
 
-  if (config.pet.alwaysOnTop) {
-    petWindow.setAlwaysOnTop(true, 'screen-saver');
-  }
+    petWindow.once('ready-to-show', () => {
+      console.log('[createPetWindow] ready-to-show，显示窗口');
+      try { petWindow.show(); petWindow.focus(); } catch (e) { console.error('[createPetWindow] show 失败:', e.message); }
+    });
 
-  petWindow.once('ready-to-show', () => {
-    console.log('[createPetWindow] ready-to-show，显示窗口');
-    petWindow.show();
-    petWindow.focus();
-  });
+    // 超时强制 show：3 秒后如果 ready-to-show 还没触发（透明窗口在某些显卡上会卡），
+    // 直接尝试 show()，避免"宠物不显示"问题
+    setTimeout(() => {
+      try {
+        if (petWindow && !petWindow.isDestroyed() && !petWindow.isVisible()) {
+          console.warn('[createPetWindow] 3 秒未 ready-to-show，强制 show');
+          petWindow.show();
+          petWindow.focus();
+        }
+      } catch (e) { console.error('[createPetWindow] 强制 show 失败:', e.message); }
+    }, 3000);
 
-  // 加载桌宠页面
-  petWindow.loadFile(path.join(__dirname, 'src', 'pet', 'index.html'));
+    // 加载桌宠页面
+    petWindow.loadFile(path.join(__dirname, 'src', 'pet', 'index.html'));
 
   // 仅开发环境下打开 DevTools，生产打包版不再自动弹出
   if (process.argv.includes('--dev') || process.env.NODE_ENV === 'development') {
@@ -758,6 +808,13 @@ function createPetWindow() {
       }
     }, 200);
   });
+
+  } catch (e) {
+    console.error('[createPetWindow] 创建失败:', e && e.stack ? e.stack : e);
+    try {
+      dialog.showErrorBox('趣宝启动失败', '宠物窗口创建失败：\n' + (e && e.message ? e.message : e) + '\n\n日志文件位置：' + LOG_FILE);
+    } catch (_) {}
+  }
 }
 
 // ============================================================

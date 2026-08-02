@@ -343,6 +343,14 @@ function initAllEventListeners() {
   ensureInitialStateFallback();
 }
 
+// ------- 启动入口：初始化 DOM 引用 → 注入 base64 图片 → 绑定事件监听 -------
+function boot() {
+  console.log('[pet] boot() 启动');
+  initDomRefs();
+  injectPetImages();
+  initAllEventListeners();
+}
+
 // ------- 主动兜底：极端时序下 did-finish-load 在监听注册前触发，导致 config:init / state:init 丢失 -------
 // 延迟 300ms 后检查：如果 currentConfig 或 petState 仍是默认值，主动 invoke 拉一次
 function ensureInitialStateFallback() {
