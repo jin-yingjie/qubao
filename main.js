@@ -1782,6 +1782,10 @@ ipcMain.on('note:update', (event, { id, content }) => {
   note.content = content;
   note.updatedAt = Date.now();
   saveNotes();
+  // 便签列表窗口打开时实时刷新
+  if (notesListWindow && !notesListWindow.isDestroyed()) {
+    notesListWindow.webContents.send('notes:list', notesData);
+  }
 });
 
 ipcMain.on('note:delete', (event, id) => {
@@ -1793,6 +1797,10 @@ ipcMain.on('note:delete', (event, id) => {
   const noteWin = noteWindows.find(n => n.id === id);
   if (noteWin && !noteWin.win.isDestroyed()) {
     noteWin.win.close();
+  }
+  // 便签列表窗口打开时实时刷新
+  if (notesListWindow && !notesListWindow.isDestroyed()) {
+    notesListWindow.webContents.send('notes:list', notesData);
   }
 });
 

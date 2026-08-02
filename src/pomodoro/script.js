@@ -4,6 +4,7 @@
 let totalSeconds = 25 * 60;   // 当前模式总秒数
 let remaining = totalSeconds; // 剩余秒数
 let running = false;          // 是否运行中（主进程视角）
+let resetting = false;        // 重置中标志，防止 tick 广播覆盖重置状态
 // "本地模式"按钮显示：开始 / 暂停 / 继续
 // 只要 remaining < totalSeconds && !running 且 remaining > 0 => 显示"继续"
 // running => "暂停"
@@ -67,6 +68,8 @@ function applyState(state) {
 
 // 订阅主进程每秒的 tick
 petAPI.pomodoroOnTick((state) => {
+  // 重置操作进行中时忽略 tick 广播，防止旧状态覆盖重置结果
+  if (resetting) return;
   applyState(state);
 });
 // 订阅主进程的"计时结束"事件（提示由宠物对话框显示，不再用 alert）
@@ -97,11 +100,20 @@ startBtn.addEventListener('click', async () => {
 
 // 重置
 resetBtn.addEventListener('click', async () => {
+  // 设置重置中标志，忽略期间 tick 广播
+  resetting = true;
+  // 立即更新本地状态，让 UI 即时响应
+  running = false;
+  remaining = totalSeconds;
+  updateDisplay();
+  updateBtn();
   try {
     const st = await petAPI.pomodoroReset(totalSeconds);
     applyState(st);
   } catch (e) {
     console.error('番茄钟重置失败', e);
+  } finally {
+    resetting = false;
   }
 });
 
