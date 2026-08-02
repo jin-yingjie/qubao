@@ -29,6 +29,7 @@
       "package.json"
     ],
     "extraResources": [],
+    "afterPack": "afterPack.js",
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico",
