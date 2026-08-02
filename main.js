@@ -185,32 +185,32 @@ function saveNotes() {
 
 
 // ============================================================
-// 云函数调用工具（通过腾讯云 SCF API Invoke 调用 petApi）
-//   - 使用 TC3-HMAC-SHA256 签名算法，无需 HTTP 触发器
-//   - SecretId/SecretKey 从腾讯云控制台获取
+// 云函数调用工具（通过腾讯云 TCB API InvokeCloudFunction 调用 petApi）
+//   - 使用 TC3-HMAC-SHA256 签名算法
+//   - 仅需 QcloudTCBFullAccess 权限即可（云开发全读写）
 // ============================================================
 
 // ⚠️ 安全提示：以下密钥会打包进安装包，理论上可被反编译提取。
-//    建议在腾讯云后台创建子账号，仅授予 QcloudCloudBaseFullAccess 权限。
+//    建议在腾讯云后台创建子账号，仅授予 QcloudTCBFullAccess 权限。
 const CLOUD_SECRET_ID = 'AKIDOsCJDweBUm4IKQVRHwT0a8kEYifQyMZ3';
 const CLOUD_SECRET_KEY = 'NYYL3av67xZKyUzRk5NViiV4PYUChz3v';
 const CLOUD_ENV_ID = 'cloud1-d9gjbey4a7a8fd907';
-const SCF_HOST = 'scf.tencentcloudapi.com';
-const SCF_SERVICE = 'scf';
-const SCF_VERSION = '2018-04-16';
-const SCF_REGION = 'ap-shanghai';
+const TCB_HOST = 'tcb.tencentcloudapi.com';
+const TCB_SERVICE = 'tcb';
+const TCB_VERSION = '2018-06-08';
+const TCB_REGION = 'ap-shanghai';
 
 function callCloudApi(action, data) {
   return new Promise((resolve, reject) => {
     // 1. 构造云函数请求参数（ClientContext 是 JSON 字符串）
     const clientContext = JSON.stringify({ action: action, ...data });
 
-    // 2. 构造 SCF API 请求体
+    // 2. 构造 TCB InvokeCloudFunction 请求体
     const body = JSON.stringify({
+      EnvId: CLOUD_ENV_ID,
       FunctionName: 'petApi',
-      Namespace: CLOUD_ENV_ID,
-      ClientContext: clientContext,
-      InvocationType: 'RequestResponse'
+      InvokeType: 'RequestResponse',
+      ClientContext: clientContext
     });
 
     // 3. 生成 TC3-HMAC-SHA256 签名
@@ -218,19 +218,19 @@ function callCloudApi(action, data) {
     const date = new Date(timestamp * 1000).toISOString().slice(0, 10);
 
     // 3.1 规范请求串 (CanonicalRequest)
-    const canonicalHeaders = `content-type:application/json; charset=utf-8\nhost:${SCF_HOST}\n`;
+    const canonicalHeaders = `content-type:application/json; charset=utf-8\nhost:${TCB_HOST}\n`;
     const signedHeaders = 'content-type;host';
     const hashedRequestPayload = crypto.createHash('sha256').update(body).digest('hex');
     const canonicalRequest = `POST\n/\n\n${canonicalHeaders}\n${signedHeaders}\n${hashedRequestPayload}`;
 
     // 3.2 待签名串 (StringToSign)
-    const credentialScope = `${date}/${SCF_SERVICE}/tc3_request`;
+    const credentialScope = `${date}/${TCB_SERVICE}/tc3_request`;
     const hashedCanonicalRequest = crypto.createHash('sha256').update(canonicalRequest).digest('hex');
     const stringToSign = `TC3-HMAC-SHA256\n${timestamp}\n${credentialScope}\n${hashedCanonicalRequest}`;
 
     // 3.3 计算签名 (Signature)
     const secretDate = crypto.createHmac('sha256', 'TC3' + CLOUD_SECRET_KEY).update(date).digest();
-    const secretService = crypto.createHmac('sha256', secretDate).update(SCF_SERVICE).digest();
+    const secretService = crypto.createHmac('sha256', secretDate).update(TCB_SERVICE).digest();
     const secretSigning = crypto.createHmac('sha256', secretService).update('tc3_request').digest();
     const signature = crypto.createHmac('sha256', secretSigning).update(stringToSign).digest('hex');
 
@@ -240,17 +240,17 @@ function callCloudApi(action, data) {
     // 4. 发送 HTTPS 请求
     console.log(`[callCloudApi] action=${action} | data=`, data);
     const options = {
-      hostname: SCF_HOST,
+      hostname: TCB_HOST,
       path: '/',
       method: 'POST',
       headers: {
         'Authorization': authorization,
         'Content-Type': 'application/json; charset=utf-8',
-        'Host': SCF_HOST,
-        'X-TC-Action': 'Invoke',
-        'X-TC-Version': SCF_VERSION,
+        'Host': TCB_HOST,
+        'X-TC-Action': 'InvokeCloudFunction',
+        'X-TC-Version': TCB_VERSION,
         'X-TC-Timestamp': timestamp.toString(),
-        'X-TC-Region': SCF_REGION,
+        'X-TC-Region': TCB_REGION,
         'Content-Length': Buffer.byteLength(body)
       }
     };
@@ -262,18 +262,18 @@ function callCloudApi(action, data) {
         console.log(`[callCloudApi] 响应状态: ${res.statusCode} | body=`, responseBody.substring(0, 500));
         try {
           const parsed = JSON.parse(responseBody);
-          // SCF API 响应格式: { Response: { Result: { RetMsg: "..." }, Error: {...}, RequestId: "..." } }
+          // TCB API 响应格式: { Response: { Result: "字符串", Error: {...}, RequestId: "..." } }
           if (parsed.Response) {
             if (parsed.Response.Error) {
               console.error('[callCloudApi] API错误:', parsed.Response.Error);
               reject(new Error(`云API错误: ${parsed.Response.Error.Message || '未知错误'}`));
               return;
             }
-            // RetMsg 是云函数返回值的 JSON 字符串
-            const retMsg = parsed.Response.Result ? parsed.Response.Result.RetMsg : null;
-            if (retMsg) {
-              try { resolve(JSON.parse(retMsg)); }
-              catch (e) { reject(new Error('解析云函数返回值失败: ' + retMsg.substring(0, 200))); }
+            // TCB InvokeCloudFunction 的 Result 是云函数返回值的 JSON 字符串
+            const result = parsed.Response.Result;
+            if (result) {
+              try { resolve(JSON.parse(result)); }
+              catch (e) { reject(new Error('解析云函数返回值失败: ' + String(result).substring(0, 200))); }
             } else {
               resolve(parsed.Response);
             }
