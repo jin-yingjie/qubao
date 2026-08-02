@@ -187,7 +187,8 @@ function saveNotes() {
 // ============================================================
 // 云函数调用工具（通过 TCB HTTP API 调用 petApi）
 //   - 使用 TC3-HMAC-SHA256 签名认证
-//   - URL 格式: https://{env-id}.api.tcloudbasegateway.com/v1/functions/{function-name}?webfn=true
+//   - URL: https://{env-id}.api.tcloudbasegateway.com/v1/functions/{function-name}
+//   - petApi 是普通云函数（非 web 函数），不需要 webfn=true
 // ============================================================
 
 const CLOUD_ENV_ID = 'cloud1-d9gjbey4a7a8fd907';
@@ -205,26 +206,20 @@ function getTC3Signature(secretKey, date, service, stringToSign) {
 
 function callCloudApi(action, data) {
   return new Promise((resolve, reject) => {
-    const clientContext = JSON.stringify({ action: action, ...data });
-    const body = clientContext;
+    const body = JSON.stringify({ action: action, ...data });
 
     const timestamp = Math.floor(Date.now() / 1000);
     const date = new Date().toISOString().substring(0, 10);
     const service = 'tcb';
     const host = `${CLOUD_ENV_ID}.api.tcloudbasegateway.com`;
     const path = `/v1/functions/${CLOUD_FUNCTION_NAME}`;
-    const queryString = 'webfn=true';
-    const url = `https://${host}${path}?${queryString}`;
 
-    // 生成 TC3 签名
-    const httpRequestMethod = 'POST';
-    const canonicalUri = path;
-    const canonicalQueryString = queryString;
+    // 生成 TC3 签名（无查询参数）
     const contentType = 'application/json; charset=utf-8';
     const canonicalHeaders = `content-type:${contentType}\nhost:${host}\nx-tc-action:httpinvoke\n`;
     const signedHeaders = 'content-type;host;x-tc-action';
     const hashedRequestPayload = crypto.createHash('sha256').update(body).digest('hex');
-    const canonicalRequest = `${httpRequestMethod}\n${canonicalUri}\n${canonicalQueryString}\n${canonicalHeaders}\n${signedHeaders}\n${hashedRequestPayload}`;
+    const canonicalRequest = `POST\n${path}\n\n${canonicalHeaders}\n${signedHeaders}\n${hashedRequestPayload}`;
     const algorithm = 'TC3-HMAC-SHA256';
     const credentialScope = `${date}/${service}/tc3_request`;
     const hashedCanonicalRequest = crypto.createHash('sha256').update(canonicalRequest).digest('hex');
@@ -233,11 +228,11 @@ function callCloudApi(action, data) {
 
     const authorization = `${algorithm} Credential=${CLOUD_SECRET_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}, Timestamp=${timestamp}`;
 
-    console.log(`[callCloudApi] action=${action} | URL=${url}`);
+    console.log(`[callCloudApi] action=${action} | path=${path}`);
 
     const options = {
       hostname: host,
-      path: `${path}?${queryString}`,
+      path: path,
       method: 'POST',
       headers: {
         'Authorization': authorization,
@@ -254,26 +249,13 @@ function callCloudApi(action, data) {
       res.on('end', () => {
         console.log(`[callCloudApi] 响应状态: ${res.statusCode} | body=`, responseBody.substring(0, 500));
 
-        if (res.statusCode === 401 || res.statusCode === 403) {
-          reject(new Error('云函数访问被拒绝(状态码' + res.statusCode + ')，请检查 SecretId/SecretKey 是否正确'));
+        if (res.statusCode !== 200) {
+          reject(new Error(`云函数调用失败(状态码${res.statusCode}): ${responseBody.substring(0, 200)}`));
           return;
         }
 
         try {
-          const parsed = JSON.parse(responseBody);
-          if (parsed.RetMsg) {
-            try { resolve(JSON.parse(parsed.RetMsg)); }
-            catch (e) { reject(new Error('解析 RetMsg 失败: ' + String(parsed.RetMsg).substring(0, 200))); }
-          } else if (parsed.success !== undefined || parsed.code !== undefined) {
-            resolve(parsed);
-          } else if (parsed.Response && parsed.Response.Result) {
-            const r = parsed.Response.Result;
-            if (typeof r === 'string') { try { resolve(JSON.parse(r)); } catch(e) { reject(new Error('解析Result失败')); } }
-            else if (r.RetMsg) { try { resolve(JSON.parse(r.RetMsg)); } catch(e) { reject(new Error('解析RetMsg失败')); } }
-            else { resolve(r); }
-          } else {
-            reject(new Error('云函数返回格式异常: ' + responseBody.substring(0, 200)));
-          }
+          resolve(JSON.parse(responseBody));
         } catch (e) {
           reject(new Error('解析云函数响应失败: ' + responseBody.substring(0, 200)));
         }
