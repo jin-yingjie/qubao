@@ -43,7 +43,7 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "createDesktopShortcut": true,
+      "createDesktopShortcut": false,
       "createStartMenuShortcut": true,
       "shortcutName": "趣宝",
       "installerIcon": "assets/icon.ico",

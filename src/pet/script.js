@@ -122,7 +122,7 @@ const actionConfig = {
   sleep:  { cls: 'action-sleep',  fx: '💤', bubble: '😴' },
   play:   { cls: 'action-play',   fx: '🎾', bubble: '🥳' },
   cure:   { cls: 'action-bathe',  fx: '💊', bubble: '🤒' },
-  'no-item': { cls: '', fx: '🛒', bubble: '去小程序购买物品' }
+  'no-item': { cls: '', fx: '🛒', bubble: '物品不足' }
 };
 
 function playAction(action) {
@@ -132,12 +132,18 @@ function playAction(action) {
   if (!activePet) return;
 
   clearAction();
-  activePet.classList.add(cfg.cls);
+  if (cfg.cls) activePet.classList.add(cfg.cls);
   actionFx.textContent = cfg.fx;
   actionFx.classList.remove('show');
   void actionFx.offsetWidth;
   actionFx.classList.add('show');
-  showMoodBubble(cfg.bubble, 1800);
+
+  // 物品不足时用独立气泡窗口显示文字提示（mood-bubble 无背景，文字看不清）
+  if (action === 'no-item') {
+    showTextBubble(cfg.bubble, 3000);
+  } else {
+    showMoodBubble(cfg.bubble, 1800);
+  }
 
   if (action !== 'sleep') {
     actionTimer = setTimeout(clearAction, 2500);

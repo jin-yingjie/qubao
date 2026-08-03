@@ -386,7 +386,7 @@ const pomodoro = {
       pomodoroWindow.setTitle(pomodoro.fmt(pomodoro.remaining));
     } else {
       pomodoroWindow.setProgressBar(0, { mode: 'none' });
-      pomodoroWindow.setTitle('番茄钟');
+      pomodoroWindow.setTitle('倒计时');
     }
     // 把倒计时文字直接画到任务栏按钮图标上
     pomodoro.refreshTaskbarIcon();
@@ -407,19 +407,19 @@ const pomodoro = {
       pomodoro.updateTaskbar();
       if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
         pomodoroWindow.setProgressBar(1, { mode: 'normal' });
-        pomodoroWindow.setTitle('时间到');
-        // 不再强制 show/focus 番茄钟窗口，避免抢焦点
+        pomodoroWindow.setTitle('倒计时');
+        // 不再强制 show/focus 倒计时窗口，避免抢焦点
         pomodoroWindow.webContents.send('pomodoro:finished');
       }
       // 1) 让宠物头顶气泡显示提示（独立气泡窗口，按文字长度自适应宽度）
-      showBubble('🎉 番茄钟时间到！休息一下吧～', 5000);
+      showBubble('  时间到了~', 5000);
       // 2) 系统通知 + 闹铃提醒（受用户配置控制，默认开启）
       try {
         const { Notification } = require('electron');
         const iconPath = path.join(__dirname, 'assets', 'icon.png');
         const n = new Notification({
-          title: '番茄钟 时间到！',
-          body: '🎉 休息一下吧～',
+          title: '趣宝桌宠提醒您：',
+          body: '  您设置的时间到了~',
           icon: fs.existsSync(iconPath) ? iconPath : undefined,
           silent: true   // 用自定义闹铃，通知静音避免双重声音
         });
@@ -440,7 +440,7 @@ const pomodoro = {
     setTimeout(() => {
       if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
         pomodoroWindow.setProgressBar(0, { mode: 'none' });
-        pomodoroWindow.setTitle('番茄钟');
+        pomodoroWindow.setTitle('倒计时');
         // 恢复默认趣宝 icon.ico，不再显示动态倒计时图标
         const def = pomodoro.getDefaultIcon();
         if (def) pomodoroWindow.setIcon(def);
@@ -815,7 +815,7 @@ function createTray() {
     return Menu.buildFromTemplate([
       { label: petVisible ? '🧸 隐藏' : '🧸 显示', click: () => togglePet() },
       { label: '📝 便签', click: () => createNotesListWindow() },
-      { label: '⏰ 番茄钟', click: () => createPomodoroWindow() },
+      { label: '⏰ 倒计时', click: () => createPomodoroWindow() },
       { label: '⚙️ 设置', click: () => createSettingsWindow() }
     ]);
   }
@@ -1186,7 +1186,7 @@ function createStatusWindow() {
 
   statusWindow = new BrowserWindow({
     width: 300,
-    height: 460,
+    height: 500,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -1389,8 +1389,8 @@ ipcMain.on('pet:interact', async (event, action) => {
             petWindow.webContents.send('pet:levelup', result.level)
           }
         }
-      } else if (result.needItem) {
-        // 物品不足，提示用户去小程序购买
+      } else if (result.needItem || (result.success === false && (result.needItem || result.error))) {
+        // 物品不足或云端互动失败，提示用户去小程序购买物品
         if (result.inventory) {
           config.inventory = result.inventory
           saveConfig()
@@ -1399,6 +1399,14 @@ ipcMain.on('pet:interact', async (event, action) => {
         if (petWindow && !petWindow.isDestroyed()) {
           petWindow.webContents.send('pet:action', 'no-item')
         }
+        // 同时通过独立气泡窗口显示文字提示（确保用户能看到）
+        showBubble('🛒 物品不足', 3000)
+      } else if (result.success === false) {
+        // 其他失败情况也提示
+        if (petWindow && !petWindow.isDestroyed()) {
+          petWindow.webContents.send('pet:action', 'no-item')
+        }
+        showBubble('🛒 物品不足', 3000)
       }
       return
     } catch (e) {
@@ -1457,11 +1465,24 @@ async function findItemForAction(action) {
   const ACTION_CATEGORY = {
     feed: 'food', bathe: 'clean', cure: 'medicine'
   }
+  // 物品名称关键词（用于无 category 字段时的兜底匹配）
+  const ACTION_KEYWORDS = {
+    food: ['食', '粮', '鱼', '肉', '饭', '果', '奶', '零食', 'feed', 'food'],
+    clean: ['沐', '浴', '洗', '清洁', '肥皂', '香波', 'clean', 'bathe'],
+    medicine: ['药', '丸', '片', '治疗', '医疗', 'medicine', 'cure', 'heal']
+  }
   const category = ACTION_CATEGORY[action]
   if (!category) return null
   const inventory = config.inventory || []
-  // 库存物品需要有 category 字段或通过 id 前缀匹配
-  const item = inventory.find(i => i.count > 0 && (i.category === category || i.id?.startsWith(category)))
+  const keywords = ACTION_KEYWORDS[category] || []
+  // 优先级1：通过 category 字段精确匹配
+  // 优先级2：通过 id 前缀匹配
+  // 优先级3：通过 name 字段关键词模糊匹配
+  const item = inventory.find(i => i.count > 0 && (
+    i.category === category ||
+    i.id?.startsWith(category) ||
+    (i.name && keywords.some(kw => String(i.name).includes(kw)))
+  ))
   return item ? item.id : null
 }
 
@@ -1512,7 +1533,11 @@ ipcMain.handle('bind:status', async () => {
     const result = await callCloudApi('bindStatus', { openid })
     // 同步更新本地缓存的用户信息
     if (result.success && result.user) {
-      config.bind.nickName = result.user.nickName || ''
+      // 昵称防护：仅当云端返回有效昵称（非空且非默认值）时才更新本地
+      const cloudNick = result.user.nickName || ''
+      if (cloudNick && !cloudNick.includes('默认用户') && !cloudNick.includes('探鑫宝用户')) {
+        config.bind.nickName = cloudNick
+      }
       config.bind.points = result.user.points || 0
       saveConfig()
       // 广播绑定信息变更，让所有已打开窗口（状态面板/宠物窗口等）即时刷新昵称和积分
@@ -1667,7 +1692,8 @@ ipcMain.handle('autostart:set', async (event, enable) => {
   saveConfig();
   app.setLoginItemSettings({
     openAtLogin: enable,
-    path: process.execPath
+    path: process.execPath,
+    name: '趣宝'
   });
   // 立即回读系统实际状态，确认是否设置成功
   const actual = app.getLoginItemSettings().openAtLogin;
@@ -1837,9 +1863,12 @@ app.whenReady().then(() => {
     } catch (_) {}
   }
   // 根据配置同步开机自启状态（只要 config.autoStart 为 true 就保持开机启动）
+  // 先清理可能存在的旧启动项（旧版本以 qubao 为名注册），再用新名称"趣宝"注册
+  app.setLoginItemSettings({ openAtLogin: false, name: 'qubao' });
   app.setLoginItemSettings({
     openAtLogin: !!config.autoStart,
-    path: process.execPath
+    path: process.execPath,
+    name: '趣宝'
   });
   // 回读系统实际状态，更新本地配置（防止系统拒绝设置后配置与实际不符）
   const actualAutoStart = app.getLoginItemSettings().openAtLogin;
@@ -1858,7 +1887,11 @@ app.whenReady().then(() => {
       try {
         const result = await callCloudApi('bindStatus', { openid: config.bind.openid });
         if (result.success && result.user) {
-          config.bind.nickName = result.user.nickName || '';
+          // 昵称防护：仅当云端返回有效昵称（非空且非默认值）时才更新本地
+          const cloudNick = result.user.nickName || '';
+          if (cloudNick && !cloudNick.includes('默认用户') && !cloudNick.includes('探鑫宝用户')) {
+            config.bind.nickName = cloudNick;
+          }
           config.bind.points = result.user.points || 0;
           saveConfig();
           broadcastBindInfo();

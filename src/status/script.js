@@ -32,6 +32,9 @@ document.querySelectorAll('.action-btn').forEach(btn => {
     // 按钮反馈
     btn.style.transform = 'scale(0.92)';
     setTimeout(() => btn.style.transform = '', 150);
+    // 显示小程序二维码
+    const qrBox = document.getElementById('qrcode-box');
+    if (qrBox) qrBox.classList.add('show');
   });
 });
 

@@ -208,7 +208,45 @@ html, body {
   text-align: center;
   font-size: 10px;
   color: #aaa;
-  margin-top: auto;
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+
+/* 小程序二维码容器（默认隐藏，点击互动按钮时显示） */
+.qrcode-box {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.qrcode-box.show {
+  display: flex;
+}
+
+.qrcode-img {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+  border-radius: 6px;
+  border: 1px solid #eee;
+}
+
+.qrcode-tip {
+  font-size: 10px;
+  color: #888;
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+/* qrcode-box 内部的 card-tip 需要覆盖掉全局 margin-top:auto 的影响（当它在 show 容器内部时） */
+.qrcode-box .card-tip {
+  margin-top: 6px;
+  margin-bottom: 2px;
+  margin-left: 0;
+  margin-right: 0;
+  width: 100%;
+  text-align: center;
 }
 
 /* 标题行 */
