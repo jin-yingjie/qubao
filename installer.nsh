@@ -1,40 +1,27 @@
-!include nsDialogs.nsh
+; ============================================================
+; 趣宝桌宠 NSIS 安装脚本自定义
+; ============================================================
 
-; 在选择安装目录页面之后、安装开始之前，添加自定义页面
-!macro customPageAfterChangeDir
-  !ifndef BUILD_UNINSTALLER
-    Page custom AutoStartPageCreate AutoStartPageLeave
-  !endif
+; customInit: 在 .onInit 中、进程检查之前执行
+; 这是关闭旧进程的正确时机——在 electron-builder 检测进程是否运行之前
+!macro customInit
+  ; 使用 PowerShell 按路径匹配关闭进程（避免中文进程名编码问题）
+  ; 注意：NSIS 中 $$ 转义为 $，所以 $$_ 转义为 $_
+  nsExec::Exec 'powershell -NoProfile -WindowStyle Hidden -Command "Get-Process | Where-Object { $$_.Path -like ''*qubao*'' } | Stop-Process -Force -ErrorAction SilentlyContinue"'
+  ; 同时用 taskkill 尝试
+  nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM "趣宝.exe" /T'
+  nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM "qubao.exe" /T'
 !macroend
 
-!ifndef BUILD_UNINSTALLER
-  Var AutoStartCheckbox
+; customInstall: 写入开机启动标记文件到临时目录
+!macro customInstall
+  FileOpen $0 "$TEMP\qubao_autostart.tmp" w
+  IfErrors +3
+    FileWrite $0 "1"
+    FileClose $0
+!macroend
 
-  Function AutoStartPageCreate
-    nsDialogs::Create 1018
-    Pop $0
-
-    ${NSD_CreateCheckbox} 0 10u 100% 12u "开机时自动启动趣宝"
-    Pop $AutoStartCheckbox
-    ; 默认勾选
-    ${NSD_SetState} $AutoStartCheckbox ${BST_CHECKED}
-
-    nsDialogs::Show
-  FunctionEnd
-
-  Function AutoStartPageLeave
-    ${NSD_GetState} $AutoStartCheckbox $0
-    ${If} $0 == ${BST_CHECKED}
-      ; 写入标记文件，应用首次启动时读取
-      FileOpen $1 "$INSTDIR\.autostart" w
-      IfErrors +2
-      FileWrite $1 "1"
-      FileClose $1
-    ${EndIf}
-  FunctionEnd
-!endif
-
-; 卸载时清理标记文件
+; customUnInstall: 卸载时清理标记文件
 !macro customUnInstall
-  Delete "$INSTDIR\.autostart"
+  Delete "$TEMP\qubao_autostart.tmp"
 !macroend

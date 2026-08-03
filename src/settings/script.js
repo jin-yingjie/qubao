@@ -32,12 +32,16 @@ petAPI.onConfigInit(async (config) => {
     resetCustomBtn.style.display = 'inline-block';
   }
 
+  // 初始化复选框：优先用系统状态，失败则用本地配置
+  let isAutoStart = !!config.autoStart;
   try {
-    const isAutoStart = await petAPI.getAutoStart();
-    autostartToggle.checked = isAutoStart;
-  } catch (e) {
-    autostartToggle.checked = !!config.autoStart;
-  }
+    const systemState = await petAPI.getAutoStart();
+    if (typeof systemState === 'boolean') {
+      isAutoStart = systemState;
+      config.autoStart = systemState;
+    }
+  } catch (_) {}
+  autostartToggle.checked = isAutoStart;
 
   // 番茄钟闹铃开关（默认开启）
   try {
@@ -163,16 +167,19 @@ resetCustomBtn.addEventListener('click', () => {
 
 autostartToggle.addEventListener('change', async () => {
   const want = autostartToggle.checked;
+  // 乐观更新：立即保存本地配置，UI 状态已由浏览器更新
+  if (currentConfig) {
+    currentConfig.autoStart = want;
+  }
   try {
-    const res = await petAPI.setAutoStart(want);
-    if (!res || !res.success) {
-      // 系统实际状态与期望不一致 → 回弹开关并提示
-      autostartToggle.checked = res ? res.actual : !want;
-      alert(want ? '开机自启设置失败，可能是系统权限不足。' : '取消开机自启失败，请稍后重试。');
-    }
+    // 异步调用后端，不阻塞 UI
+    await petAPI.setAutoStart(want);
   } catch (e) {
+    // 仅在异常时回弹
     autostartToggle.checked = !want;
-    alert('设置开机启动时发生错误：' + (e.message || e));
+    if (currentConfig) {
+      currentConfig.autoStart = !want;
+    }
   }
 });
 

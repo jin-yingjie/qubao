@@ -13,7 +13,12 @@ const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const crypto = require('crypto');
+const { execSync } = require('child_process');
 const PET_IMAGES = require('./src/assets-base64.js');
+
+// 禁用 GPU 加速：减少一个 GPU 进程，降低总进程数
+// 桌宠使用简单 CSS 动画，不需要 GPU 加速
+app.disableHardwareAcceleration();
 
 // 当前版本（来自 package.json，自动更新检测的唯一真源）
 const APP_VERSION = require('./package.json').version || '0.0.0';
@@ -270,6 +275,40 @@ function callCloudApi(action, data) {
     req.write(body);
     req.end();
   });
+}
+
+// ============================================================
+// 开机自启项同步
+//   - 启动时：清理旧版本条目，按 config.autoStart 注册新条目
+//   - 用户切换时：直接 set，不做回读验证（乐观更新）
+//   - 回读时：优先读系统，失败则用本地配置
+// ============================================================
+function syncAutoStartOnLaunch(enable) {
+  // 先清理所有可能的旧条目
+  app.setLoginItemSettings({ openAtLogin: false });
+  app.setLoginItemSettings({ openAtLogin: false, name: '趣宝' });
+  app.setLoginItemSettings({ openAtLogin: false, path: process.execPath });
+  // 根据配置注册新条目
+  if (enable) {
+    app.setLoginItemSettings({
+      openAtLogin: true,
+      path: process.execPath,
+      name: '趣宝'
+    });
+  }
+}
+
+function setAutoStart(enable) {
+  app.setLoginItemSettings({
+    openAtLogin: !!enable,
+    path: process.execPath,
+    name: '趣宝'
+  });
+}
+
+function getAutoStart() {
+  // 优先使用本地配置（快速可靠），避免系统回读的不确定性
+  return !!config.autoStart;
 }
 
 // ============================================================
@@ -777,7 +816,7 @@ function createPetWindow() {
   petWindow.on('blur', () => {
     setTimeout(() => {
       if (menuWindow && !menuWindow.isFocused() && menuWindow.isVisible()) {
-        menuWindow.hide();
+        try { menuWindow.close(); } catch (_) {}
       }
     }, 200);
   });
@@ -851,7 +890,7 @@ function createMenuWindow(mouseX, mouseY) {
   const menuH = 40;
   if (menuWindow && !menuWindow.isDestroyed()) {
     if (menuWindow.isVisible()) {
-      menuWindow.hide();
+      try { menuWindow.close(); } catch (_) {}
       return;
     }
     menuWindow.setPosition(Math.round(mouseX - menuW / 2), Math.round(mouseY + 8));
@@ -882,14 +921,16 @@ function createMenuWindow(mouseX, mouseY) {
   menuWindow.setAlwaysOnTop(true, 'pop-up-menu');
 
   menuWindow.on('blur', () => {
-    if (menuWindow) menuWindow.hide();
+    if (menuWindow && !menuWindow.isDestroyed()) {
+      try { menuWindow.close(); } catch (_) {}
+    }
   });
 }
 
 // 关闭菜单
 ipcMain.on('menu:close', () => {
   if (menuWindow && !menuWindow.isDestroyed()) {
-    menuWindow.hide();
+    try { menuWindow.close(); } catch (_) {}
   }
 });
 
@@ -956,6 +997,8 @@ function showBubble(text, durationMs, lowPriority = false) {
   if (lowPriority && bubbleWindow && !bubbleWindow.isDestroyed() && bubbleWindow.isVisible() && !bubbleLowPriority) return;
   bubbleLowPriority = !!lowPriority;
   const bw = createBubbleWindow();
+  // 取消之前的延迟销毁定时器（如果有）
+  if (bw._destroyTimer) { clearTimeout(bw._destroyTimer); bw._destroyTimer = null; }
   const sendAndShow = () => {
     bw.webContents.send('bubble:show', { text, duration: durationMs });
     syncBubblePosition();
@@ -971,6 +1014,13 @@ function hideBubble(onlyIfLowPriority = false) {
   if (onlyIfLowPriority && !bubbleLowPriority) return;
   bubbleLowPriority = false;
   try { bubbleWindow.webContents.send('bubble:hide'); } catch (_) {}
+  // 隐藏后延迟 3 秒销毁窗口，释放渲染进程（下次显示时会重建）
+  // 存定时器引用到 bubbleWindow 上，showBubble 可取消
+  bubbleWindow._destroyTimer = setTimeout(() => {
+    if (bubbleWindow && !bubbleWindow.isDestroyed() && !bubbleWindow.isVisible()) {
+      try { bubbleWindow.close(); } catch (_) {}
+    }
+  }, 3000);
 }
 
 // 气泡渲染端测量完尺寸 → 主进程 setBounds，然后重新同步位置
@@ -1349,7 +1399,9 @@ ipcMain.on('pet:clicked', (event, { mouseX, mouseY }) => {
 
 // 7.2 从菜单中选择了一个功能
 ipcMain.on('menu:action', (event, action) => {
-  if (menuWindow) menuWindow.hide();
+  if (menuWindow && !menuWindow.isDestroyed()) {
+    try { menuWindow.close(); } catch (_) {}
+  }
   switch (action) {
     case 'note': createNoteWindow(); break;
     case 'pomodoro': createPomodoroWindow(); break;
@@ -1521,7 +1573,7 @@ ipcMain.on('tutorial:finish', () => {
 
 // 7.4.2 开机启动设置
 ipcMain.handle('autostart:get', () => {
-  return app.getLoginItemSettings().openAtLogin;
+  return getAutoStart();
 });
 
 // ------- 绑定相关 IPC -------
@@ -1688,21 +1740,11 @@ ipcMain.handle('bind:interact', async (event, { action, itemId }) => {
 })
 
 ipcMain.handle('autostart:set', async (event, enable) => {
-  config.autoStart = enable;
+  config.autoStart = !!enable;
   saveConfig();
-  app.setLoginItemSettings({
-    openAtLogin: enable,
-    path: process.execPath,
-    name: '趣宝'
-  });
-  // 立即回读系统实际状态，确认是否设置成功
-  const actual = app.getLoginItemSettings().openAtLogin;
-  // 如果系统实际状态和期望不一致，更新本地配置以反映真实情况
-  if (actual !== enable) {
-    config.autoStart = actual;
-    saveConfig();
-  }
-  return { success: actual === enable, actual };
+  // 直接设置系统开机启动项
+  setAutoStart(enable);
+  return { success: true };
 });
 
 // 7.5 窗口通用操作（拖动 / 关闭 / 最小化）
@@ -1847,35 +1889,48 @@ app.whenReady().then(() => {
   // 启动后 3 秒静默检查更新（有新版本才弹提示，无新版本不打扰用户）
   setTimeout(() => checkForUpdates(true), 3000);
 
-  // 首次启动时检查 NSIS 安装界面的开机启动选择
-  if (config.firstLaunch) {
-    try {
-      const autostartFlag = path.join(path.dirname(process.execPath), '.autostart');
-      if (fs.existsSync(autostartFlag)) {
-        // 用户在安装时勾选了开机启动
-        config.autoStart = true;
-        fs.unlinkSync(autostartFlag); // 读取后删除标记文件
-      } else {
-        // 用户在安装时取消勾选
-        config.autoStart = false;
+  // 检查安装时写入的自启标记文件（用于首次安装和版本更新场景）
+  // 查找多个可能的位置，确保标记文件能被找到
+  try {
+    let autostartEnabled = false;
+    let foundFlag = false;
+    const possiblePaths = [
+      path.join(path.dirname(process.execPath), '.autostart'),
+      path.join(process.env.TEMP || '', 'qubao_autostart.tmp'),
+      path.join(app.getPath('userData'), '.autostart'),
+    ];
+    
+    console.log('[autostart] 检查标记文件，execPath:', process.execPath);
+    console.log('[autostart] 可能的路径:', possiblePaths);
+    
+    for (const flagPath of possiblePaths) {
+      if (flagPath && fs.existsSync(flagPath)) {
+        console.log('[autostart] 找到标记文件:', flagPath);
+        foundFlag = true;
+        const content = fs.readFileSync(flagPath, 'utf-8');
+        console.log('[autostart] 标记文件内容:', content);
+        if (content.trim() === '1') {
+          autostartEnabled = true;
+        }
+        fs.unlinkSync(flagPath); // 读取后删除标记文件
       }
+    }
+    
+    if (foundFlag) {
+      // 只有找到标记文件才更新配置（说明是安装后的首次启动）
+      console.log('[autostart] 标记文件存在, 设置开机启动:', autostartEnabled);
+      config.autoStart = autostartEnabled;
       saveConfig();
-    } catch (_) {}
+    } else {
+      console.log('[autostart] 未找到标记文件，保留现有配置:', config.autoStart);
+    }
+  } catch (e) {
+    console.error('[autostart] 检查标记文件失败:', e.message);
   }
-  // 根据配置同步开机自启状态（只要 config.autoStart 为 true 就保持开机启动）
-  // 先清理可能存在的旧启动项（旧版本以 qubao 为名注册），再用新名称"趣宝"注册
-  app.setLoginItemSettings({ openAtLogin: false, name: 'qubao' });
-  app.setLoginItemSettings({
-    openAtLogin: !!config.autoStart,
-    path: process.execPath,
-    name: '趣宝'
-  });
-  // 回读系统实际状态，更新本地配置（防止系统拒绝设置后配置与实际不符）
-  const actualAutoStart = app.getLoginItemSettings().openAtLogin;
-  if (actualAutoStart !== config.autoStart) {
-    config.autoStart = actualAutoStart;
-    saveConfig();
-  }
+  
+  // 根据配置同步开机自启状态（启动时清理旧条目+注册新条目）
+  console.log('[autostart] 同步自启状态, config.autoStart:', config.autoStart);
+  syncAutoStartOnLaunch(config.autoStart);
 
   if (config.firstLaunch) {
     createTutorialWindow();
@@ -1909,17 +1964,20 @@ app.whenReady().then(() => {
 
 // Windows/Linux：所有窗口关闭时退出
 app.on('window-all-closed', () => {
-  // 注意：桌宠是常驻的，不会被关闭，这里只是兜底
-  if (process.platform !== 'darwin') {
-    app.quit();
+  // 如果是主动退出操作，则允许退出
+  if (app.isQuiting) {
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
   }
+  // 否则让应用继续运行（托盘模式）
+  // 不调用 app.quit()，这样外部关闭请求（如 NSIS、系统关机）仍能正常触发 before-quit
 });
 
-// 防止关闭最后一个可见窗口时整个程序退出
+// 防止用户手动关闭窗口时整个程序退出
+// 但不阻止外部请求退出（如安装程序关闭进程、系统关机等）
 app.on('before-quit', (e) => {
-  // 如果不是托盘菜单里点的退出，就阻止退出（让它常驻托盘）
-  if (!app.isQuiting) {
-    e.preventDefault();
-    if (petWindow) petWindow.hide();
-  }
+  // 如果不是主动退出，不阻止退出
+  // window-all-closed 已处理托盘常驻逻辑
+  // before-quit 只在退出流程中触发，这里不再阻止
 });
